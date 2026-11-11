@@ -6,6 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using PcbInspectionViewer.Core.Api;
 using PcbInspectionViewer.Core.Configuration;
+using PcbInspectionViewer.Core.Data;
+using PcbInspectionViewer.Core.Storage;
 using PcbInspectionViewer.Core.ViewModels;
 using Serilog;
 using Serilog.Events;
@@ -51,6 +53,26 @@ public partial class App : Application
             .ConfigureServices((_, services) =>
             {
                 services.AddSingleton<ISettingsService>(_ => new JsonSettingsService());
+                services.AddSingleton<IImageCache, ImageCache>();
+
+                services.AddSingleton<IInspectionRepository>(sp =>
+                {
+                    var settingsService = sp.GetRequiredService<ISettingsService>();
+                    var imageCache = sp.GetRequiredService<IImageCache>();
+                    string dbPath = settingsService.DatabaseFilePath;
+
+                    // Ensure directory and database with views exist
+                    string? dir = Path.GetDirectoryName(dbPath);
+                    if (!string.IsNullOrWhiteSpace(dir))
+                    {
+                        Directory.CreateDirectory(dir);
+                    }
+
+                    using var db = new InspectionDbContext(dbPath);
+                    db.EnsureDatabaseAndViewsCreatedAsync().GetAwaiter().GetResult();
+
+                    return new InspectionRepository(() => new InspectionDbContext(dbPath), imageCache);
+                });
 
                 services.AddHttpClient<IBackendHealthMonitor, BackendHealthMonitor>(client =>
                 {
@@ -66,6 +88,7 @@ public partial class App : Application
 
                 services.AddSingleton<SettingsViewModel>();
                 services.AddSingleton<InspectViewModel>();
+                services.AddSingleton<HistoryViewModel>();
                 services.AddSingleton<MainShellViewModel>();
                 services.AddSingleton<MainWindow>();
             })

@@ -106,23 +106,23 @@
 
 *Acceptance Criteria: 100-image batch completes with UI responsive; failed items recorded; restart app and history persists; filter by class+verdict correct; drill-down reopens stored result without calling API.*
 
-- [ ] **Step 4.1 — EF Core SQLite Data Model (`§5.5` & `F6`)**
-  - [ ] Database path: `%LOCALAPPDATA%\PcbInspectionViewer\inspections.db` (`BusyTimeout = 5s`).
-  - [ ] Entities: `Batch`, `Inspection`, `Defect`, `Decision`, `LlmSummary`, `QueryLog` (P2), `KbChunk` (P3).
-  - [ ] Indexes on `Inspection(InspectedAt)`, `Inspection(BatchId)`, `Inspection(BoardDisposition)`, `Defect(DefectClass)`.
-  - [ ] Create read-only SQL views (`v_inspections`, `v_defects`, `v_batches`) excluding raw LLM payloads and local file paths.
-- [ ] **Step 4.2 — Local Image Cache (`§6.4`)**
-  - [ ] Implement `IImageCache`: decode returned `test_b64` and `diff_b64` PNG data URIs and save to `%LOCALAPPDATA%\PcbInspectionViewer\cache\<sha256>.png`.
-  - [ ] Add `"Open data folder"` menu item.
+- [x] **Step 4.1 — EF Core SQLite Data Model (`§5.5` & `F6`)**
+  - [x] Database path: `%LOCALAPPDATA%\PcbInspectionViewer\inspections.db` (`BusyTimeout = 5s`).
+  - [x] Entities: `Batch`, `Inspection`, `Defect`, `Decision`, `LlmSummary`, `QueryLog` (P2), `KbChunk` (P3).
+  - [x] Indexes on `Inspection(InspectedAt)`, `Inspection(BatchId)`, `Inspection(BoardDisposition)`, `Defect(DefectClass)`.
+  - [x] Create read-only SQL views (`v_inspections`, `v_defects`, `v_batches`) excluding raw LLM payloads and local file paths.
+- [x] **Step 4.2 — Local Image Cache (`§6.4`)**
+  - [x] Implement `IImageCache`: decode returned `test_b64` and `diff_b64` PNG data URIs and save to `%LOCALAPPDATA%\PcbInspectionViewer\cache\<sha256>.png`.
+  - [x] Add `"Open data folder"` menu item.
 - [ ] **Step 4.3 — Bounded-Concurrency Batch Runner (`F2`)**
   - [ ] Implement `IBatchRunner` using `SemaphoreSlim` / `Parallel.ForEachAsync` (default concurrency 2, configurable 1–8).
   - [ ] Folder scanner: skip template file and `*_temp.*` files; support optional DeepPCB auto-pairing mode (`<id>_test.jpg` ↔ `<id>_temp.jpg`).
   - [ ] Report progress (`n / N`, ETA, per-item status) via `IProgress<BatchProgress>` at least every 250 ms.
   - [ ] Graceful per-item error capture (undecodable file, timeout, 4xx/5xx) without aborting the batch; `Cancel` finishes in-flight requests and marks remaining as `Cancelled`.
-- [ ] **Step 4.4 — History Table & Drill-Down (`F3`)**
-  - [ ] Virtualized `DataGrid` (smooth scrolling at ≥10k rows): time (local), file name, batch, verdict, #defects, classes, latency.
-  - [ ] Filters: verdict, defect class (multi-select), batch, date range, filename search.
-  - [ ] Double-click row → opens `F1` result view from SQLite + local image cache without calling the backend API.
+- [x] **Step 4.4 — History Table & Drill-Down (`F3`)**
+  - [x] Virtualized `DataGrid` (smooth scrolling at ≥10k rows): time (local), file name, batch, verdict, #defects, classes, latency.
+  - [x] Filters: verdict, defect class (multi-select), batch, date range, filename search.
+  - [x] Double-click row → opens `F1` result view from SQLite + local image cache without calling the backend API.
 
 ---
 

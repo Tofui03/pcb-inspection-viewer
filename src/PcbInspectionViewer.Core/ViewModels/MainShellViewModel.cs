@@ -37,7 +37,8 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
         ISettingsService settingsService,
         IBackendHealthMonitor healthMonitor,
         SettingsViewModel settingsViewModel,
-        InspectViewModel? inspectViewModel = null)
+        InspectViewModel? inspectViewModel = null,
+        HistoryViewModel? historyViewModel = null)
     {
         ArgumentNullException.ThrowIfNull(settingsService);
         ArgumentNullException.ThrowIfNull(healthMonitor);
@@ -47,15 +48,40 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
         _healthMonitor = healthMonitor;
         Settings = settingsViewModel;
         Inspect = inspectViewModel;
+        History = historyViewModel;
 
         DatabasePathText = _settingsService.DatabaseFilePath;
 
         Settings.SettingsSaved += OnSettingsSaved;
         Settings.HealthChecked += OnHealthChecked;
+
+        if (History is not null)
+        {
+            History.DrillDownRequested += OnHistoryDrillDownRequested;
+        }
     }
 
     public SettingsViewModel Settings { get; }
     public InspectViewModel? Inspect { get; }
+    public HistoryViewModel? History { get; }
+
+    private void OnHistoryDrillDownRequested(object? sender, Data.Entities.InspectionEntity entity)
+    {
+        if (Inspect is null)
+        {
+            return;
+        }
+
+        _ = Inspect.PopulateFromHistoryEntityAsync(entity);
+        SelectedTabIndex = 0; // Switch to Inspect tab (F1)
+    }
+
+    [RelayCommand]
+    private void OpenHistoryTab()
+    {
+        SelectedTabIndex = 1;
+        _ = History?.LoadHistoryAsync();
+    }
 
     [RelayCommand]
     private void OpenSettingsTab() => SelectedTabIndex = 4;
@@ -152,6 +178,10 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
     {
         Settings.SettingsSaved -= OnSettingsSaved;
         Settings.HealthChecked -= OnHealthChecked;
+        if (History is not null)
+        {
+            History.DrillDownRequested -= OnHistoryDrillDownRequested;
+        }
         _pollingCts.Cancel();
         _pollingCts.Dispose();
     }

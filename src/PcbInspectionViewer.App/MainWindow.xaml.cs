@@ -1,6 +1,10 @@
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Win32;
+using PcbInspectionViewer.Core.Configuration;
 using PcbInspectionViewer.Core.ViewModels;
 
 namespace PcbInspectionViewer.App;
@@ -15,6 +19,37 @@ public partial class MainWindow : Window
     }
 
     private InspectViewModel? InspectVm => (DataContext as MainShellViewModel)?.Inspect;
+    private HistoryViewModel? HistoryVm => (DataContext as MainShellViewModel)?.History;
+
+    private void OnHistoryDataGridMouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (HistoryVm?.SelectedItem is not null)
+        {
+            _ = HistoryVm.DrillDownCommand.ExecuteAsync(HistoryVm.SelectedItem);
+        }
+    }
+
+    private void OnOpenDataFolderClick(object sender, RoutedEventArgs e)
+    {
+        string dataDir = JsonSettingsService.GetDefaultDataDirectory();
+        if (!Directory.Exists(dataDir))
+        {
+            Directory.CreateDirectory(dataDir);
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = dataDir,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Unable to open data directory:\n{ex.Message}", "PCB Inspection Viewer", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+    }
 
     private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
     {

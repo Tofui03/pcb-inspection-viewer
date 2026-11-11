@@ -4,7 +4,10 @@ using CommunityToolkit.Mvvm.Input;
 using PcbInspectionViewer.Core.Api;
 using PcbInspectionViewer.Core.Api.Dtos;
 using PcbInspectionViewer.Core.Configuration;
+using PcbInspectionViewer.Core.Data;
+using PcbInspectionViewer.Core.Data.Entities;
 using PcbInspectionViewer.Core.Geometry;
+using PcbInspectionViewer.Core.Storage;
 
 namespace PcbInspectionViewer.Core.ViewModels;
 
@@ -17,6 +20,8 @@ public sealed partial class InspectViewModel : ObservableObject, IDisposable
 
     private readonly IInspectionApiClient _apiClient;
     private readonly ISettingsService _settingsService;
+    private readonly IInspectionRepository? _repository;
+    private readonly IImageCache? _imageCache;
     private CancellationTokenSource? _inspectCts;
     private string? _baseUrlOverride;
 
@@ -103,10 +108,16 @@ public sealed partial class InspectViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<string> AllowedIpcClasses => BatchOptions.AllowedIpcClasses;
 
-    public InspectViewModel(IInspectionApiClient apiClient, ISettingsService settingsService)
+    public InspectViewModel(
+        IInspectionApiClient apiClient,
+        ISettingsService settingsService,
+        IInspectionRepository? repository = null,
+        IImageCache? imageCache = null)
     {
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
+        _repository = repository;
+        _imageCache = imageCache;
     }
 
     partial void OnTemplateImagePathChanged(string value)
@@ -224,6 +235,25 @@ public sealed partial class InspectViewModel : ObservableObject, IDisposable
 
             UploadTriageEnvelope envelope = await _apiClient.UploadTriageAsync(request, _inspectCts.Token);
             ApplyInspectionResult(envelope);
+
+            if (_repository is not null)
+            {
+                try
+                {
+                    await _repository.SaveInspectionResultAsync(new SaveInspectionCommand(
+                        BatchId: BatchId,
+                        FileName: Path.GetFileName(effectiveTestPath),
+                        TemplateImagePath: TemplateImagePath,
+                        TestImagePath: effectiveTestPath,
+                        IpcClass: IpcClass,
+                        Envelope: envelope), _inspectCts.Token);
+                }
+                catch
+                {
+                    // Persistence failure should not crash or suppress the UI inspection display
+                }
+            }
+
             HasResult = true;
             StatusOrErrorMessage = "Inspection completed successfully.";
         }
@@ -281,6 +311,75 @@ public sealed partial class InspectViewModel : ObservableObject, IDisposable
         ZoomFactor = 1.0;
         PanX = 0.0;
         PanY = 0.0;
+    }
+
+    public async Task PopulateFromHistoryEntityAsync(InspectionEntity entity, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        BatchId = entity.BatchId;
+        IpcClass = entity.IpcClass;
+        TemplateImagePath = entity.TemplateImagePath ?? string.Empty;
+        TestImagePath = entity.TestImagePath ?? string.Empty;
+        VerdictText = entity.BoardDisposition.ToUpperInvariant();
+        IsLineHalted = entity.LineHalted;
+        Stage1LatencyMs = entity.Stage1LatencyMs;
+        RoundTripMs = entity.RoundTripMs;
+
+        // Restore images from local cache if available
+        if (_imageCache is not null)
+        {
+            TemplateImageB64 = await _imageCache.TryGetCachedDataUriAsync(entity.CachedTemplateImagePath, ct)
+                ?? await _imageCache.TryGetCachedDataUriAsync(entity.TemplateImagePath, ct);
+            TestImageB64 = await _imageCache.TryGetCachedDataUriAsync(entity.CachedTestImagePath, ct);
+            DiffImageB64 = await _imageCache.TryGetCachedDataUriAsync(entity.CachedDiffImagePath, ct);
+        }
+
+        ActiveImageLayer = "Test";
+        ActiveImageDataUri = TestImageB64;
+
+        Detections.Clear();
+        foreach (DefectEntity d in entity.Defects)
+        {
+            Detections.Add(new BoundingBoxDetectionDto
+            {
+                X1 = (int)d.X1,
+                Y1 = (int)d.Y1,
+                X2 = (int)d.X2,
+                Y2 = (int)d.Y2,
+                DefectClass = d.DefectClass,
+                Confidence = d.Confidence,
+                AreaPx = (int)d.AreaPx
+            });
+        }
+
+        Decisions.Clear();
+        foreach (DecisionEntity dec in entity.Decisions)
+        {
+            Decisions.Add(new InspectionDecisionDto
+            {
+                DetectionIndex = dec.DetectionIndex,
+                DefectClass = dec.DefectClass,
+                Severity = dec.Severity,
+                Disposition = dec.Disposition,
+                IpcStandardClause = dec.IpcStandardClause,
+                ElectricalFailureRisk = dec.ElectricalFailureRisk,
+                RootCauseHypothesis = dec.RootCauseHypothesis,
+                RecommendedCorrectiveAction = dec.RecommendedCorrectiveAction,
+                GuardrailOverridden = dec.GuardrailOverridden,
+                OverrideReason = dec.OverrideReason
+            });
+        }
+
+        AlignedDefects.Clear();
+        foreach (AlignedDefectDecision aligned in OverlayGeometryCalculator.PairDetectionsWithDecisions(Detections, Decisions))
+        {
+            AlignedDefects.Add(aligned);
+        }
+
+        HasResult = true;
+        HasError = false;
+        StatusOrErrorMessage = $"Loaded offline result for {entity.FileName} (#{entity.Id}) from local database.";
     }
 
     private void ApplyInspectionResult(UploadTriageEnvelope envelope)

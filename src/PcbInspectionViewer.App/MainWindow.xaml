@@ -13,6 +13,7 @@
     <Window.InputBindings>
         <KeyBinding Key="F5" Command="{Binding Inspect.InspectCommand}" />
         <KeyBinding Key="Escape" Command="{Binding Inspect.CancelInspectCommand}" />
+        <KeyBinding Key="F3" Command="{Binding OpenHistoryTabCommand}" />
         <KeyBinding Key="F7" Command="{Binding OpenSettingsTabCommand}" />
     </Window.InputBindings>
 
@@ -432,11 +433,149 @@
 
             <!-- Screen 2: History (F3) -->
             <TabItem Header="2. History">
-                <Grid Margin="24">
-                    <TextBlock Text="Inspection History &amp; Drill-Down (Ready for Milestone D8–10)"
-                               FontSize="16"
-                               FontWeight="SemiBold"
-                               Foreground="#334155" />
+                <Grid Margin="16" DataContext="{Binding History}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Filter Control Bar -->
+                    <Border Grid.Row="0"
+                            Background="#F8FAFC"
+                            BorderBrush="#CBD5E1"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="12,10"
+                            Margin="0,0,0,12">
+                        <WrapPanel VerticalAlignment="Center">
+                            <!-- Verdict filter -->
+                            <TextBlock Text="Verdict:" VerticalAlignment="Center" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,6,0" />
+                            <ComboBox ItemsSource="{Binding AvailableVerdicts}"
+                                      SelectedItem="{Binding SelectedVerdict}"
+                                      Width="100"
+                                      Padding="6,4"
+                                      Margin="0,0,16,0" />
+
+                            <!-- Batch filter -->
+                            <TextBlock Text="Batch:" VerticalAlignment="Center" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,6,0" />
+                            <ComboBox ItemsSource="{Binding AvailableBatches}"
+                                      SelectedItem="{Binding SelectedBatch}"
+                                      Width="140"
+                                      Padding="6,4"
+                                      Margin="0,0,16,0" />
+
+                            <!-- Date Range filters (Spec Gap 1) -->
+                            <TextBlock Text="From:" VerticalAlignment="Center" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,6,0" />
+                            <DatePicker SelectedDate="{Binding StartDate}" Width="120" Margin="0,0,12,0" />
+
+                            <TextBlock Text="To:" VerticalAlignment="Center" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,6,0" />
+                            <DatePicker SelectedDate="{Binding EndDate}" Width="120" Margin="0,0,16,0" />
+
+                            <!-- File search -->
+                            <TextBlock Text="File:" VerticalAlignment="Center" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,6,0" />
+                            <TextBox Text="{Binding FileNameSearch, UpdateSourceTrigger=PropertyChanged}"
+                                     Width="140"
+                                     Padding="6,4"
+                                     Margin="0,0,16,0" />
+
+                            <!-- Defect classes multi-select pills -->
+                            <TextBlock Text="Defect Classes:" VerticalAlignment="Center" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,8,0" />
+                            <ItemsControl ItemsSource="{Binding AvailableDefectClasses}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Content="{Binding}"
+                                                Command="{Binding DataContext.ToggleDefectClassFilterCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                Padding="8,3"
+                                                Margin="0,0,6,0"
+                                                FontSize="11.5" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Actions -->
+                            <Button Content="Search"
+                                    Command="{Binding LoadHistoryCommand}"
+                                    Background="#2563EB"
+                                    Foreground="White"
+                                    FontWeight="SemiBold"
+                                    Padding="14,5"
+                                    Margin="8,0,8,0" />
+
+                            <Button Content="Clear Filters"
+                                    Command="{Binding ClearFiltersCommand}"
+                                    Padding="10,5" />
+                        </WrapPanel>
+                    </Border>
+
+                    <!-- Virtualized DataGrid -->
+                    <Border Grid.Row="1"
+                            BorderBrush="#CBD5E1"
+                            BorderThickness="1"
+                            CornerRadius="6">
+                        <DataGrid ItemsSource="{Binding Items}"
+                                  SelectedItem="{Binding SelectedItem}"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  CanUserSortColumns="True"
+                                  CanUserResizeColumns="True"
+                                  EnableRowVirtualization="True"
+                                  EnableColumnVirtualization="True"
+                                  VirtualizingPanel.IsVirtualizing="True"
+                                  VirtualizingPanel.VirtualizationMode="Recycling"
+                                  ScrollViewer.IsDeferredScrollingEnabled="True"
+                                  GridLinesVisibility="Horizontal"
+                                  HorizontalGridLinesBrush="#E2E8F0"
+                                  RowHeight="34"
+                                  Background="White"
+                                  BorderThickness="0"
+                                  SelectionMode="Single"
+                                  MouseDoubleClick="OnHistoryDataGridMouseDoubleClick">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Time (Local)" Binding="{Binding InspectedAtLocal, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}}" Width="150" />
+                                <DataGridTextColumn Header="File Name" Binding="{Binding FileName}" Width="160" />
+                                <DataGridTextColumn Header="Batch ID" Binding="{Binding BatchId}" Width="120" />
+                                <DataGridTemplateColumn Header="Verdict" Width="100">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{Binding BoardDisposition, Converter={StaticResource VerdictToBrushConverter}}"
+                                                    CornerRadius="4"
+                                                    Padding="6,2"
+                                                    HorizontalAlignment="Left"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding BoardDisposition}"
+                                                           Foreground="White"
+                                                           FontWeight="Bold"
+                                                           FontSize="11" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="# Defects" Binding="{Binding DefectCount}" Width="80" />
+                                <DataGridTextColumn Header="Defect Classes" Binding="{Binding DefectClassesSummary}" Width="*" />
+                                <DataGridTextColumn Header="Stage-1 Latency" Binding="{Binding Stage1LatencyMs, StringFormat={}{0:F1} ms}" Width="110" />
+                                <DataGridTextColumn Header="Round-Trip" Binding="{Binding RoundTripMs, StringFormat={}{0:F1} ms}" Width="100" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+
+                    <!-- Bottom History Status / Actions -->
+                    <DockPanel Grid.Row="2" Margin="0,8,0,0">
+                        <Button DockPanel.Dock="Right"
+                                Content="Open Data Folder"
+                                Click="OnOpenDataFolderClick"
+                                Padding="12,5" />
+                        <TextBlock Text="{Binding StatusMessage}"
+                                   VerticalAlignment="Center"
+                                   FontWeight="SemiBold"
+                                   Foreground="#475569" />
+                    </DockPanel>
                 </Grid>
             </TabItem>
 
