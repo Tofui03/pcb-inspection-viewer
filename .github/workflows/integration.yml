@@ -1,0 +1,52 @@
+name: Linux Integration Tests & Backend Health
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout client repo
+        uses: actions/checkout@v4
+
+      - name: Checkout backend repo
+        uses: actions/checkout@v4
+        with:
+          repository: Tofui03/DeepPCB-AOI
+          path: backend-src
+
+      - name: Build and launch DeepPCB-AOI container
+        run: |
+          docker build -t deeppcb-aoi:latest backend-src
+          docker run -d --name pcb-api -p 8000:8000 deeppcb-aoi:latest
+          
+          # Wait for /api/health to return 200 OK
+          echo "Waiting for backend health check..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8000/api/health | grep -q '"status":"online"'; then
+              echo "Backend is healthy!"
+              break
+            fi
+            echo "Waiting ($i/30)..."
+            sleep 2
+          done
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Run Core & Integration Tests on Linux
+        env:
+          TEST_BACKEND_URL: "http://localhost:8000"
+        run: |
+          dotnet test tests/PcbInspectionViewer.Core.Tests/PcbInspectionViewer.Core.Tests.csproj
+          dotnet test tests/PcbInspectionViewer.IntegrationTests/PcbInspectionViewer.IntegrationTests.csproj
+
+      - name: Collect container logs on failure
+        if: failure()
+        run: docker logs pcb-api

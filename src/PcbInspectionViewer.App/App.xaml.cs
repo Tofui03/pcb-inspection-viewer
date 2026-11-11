@@ -118,11 +118,20 @@ public partial class App : Application
                 });
                 services.AddSingleton<PcbInspectionViewer.Core.Llm.ISummaryCoordinator, PcbInspectionViewer.Core.Llm.SummaryCoordinator>();
 
+                services.AddSingleton<PcbInspectionViewer.Core.Sql.ISqlGuard>(sp =>
+                {
+                    var settingsService = sp.GetRequiredService<ISettingsService>();
+                    string dbPath = settingsService.DatabaseFilePath;
+                    return new PcbInspectionViewer.Core.Sql.SqlGuard(dbPath, () => new InspectionDbContext(dbPath));
+                });
+                services.AddSingleton<PcbInspectionViewer.Core.Sql.INlToSqlService, PcbInspectionViewer.Core.Sql.NlToSqlService>();
+
                 services.AddSingleton<SettingsViewModel>();
                 services.AddSingleton<InspectViewModel>();
                 services.AddSingleton<BatchInspectViewModel>();
                 services.AddSingleton<HistoryViewModel>();
                 services.AddSingleton<DashboardViewModel>();
+                services.AddSingleton<AskViewModel>();
                 services.AddSingleton<MainShellViewModel>();
                 services.AddSingleton<MainWindow>();
             })

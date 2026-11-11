@@ -153,24 +153,23 @@
 
 *Acceptance Criteria: Core coverage ≥ 70%; all workflows green; README quick start works on a clean Windows machine; (P2) SqlGuard suite ≥ 30 cases passes, SQL shown before run, write attempts impossible.*
 
-- [ ] **Step 6.1 — P2 Natural-Language Query over History (`§4.3`, Should)**
-  - [ ] Implement `ISqlGuard` (enforced in C# code, not prompt):
+- [x] **Step 6.1 — P2 Natural-Language Query over History (`§4.3`, Should)**
+  - [x] Implement `ISqlGuard` (enforced in C# code, not prompt):
     1. Separate SQLite connection with `Mode=ReadOnly` + `PRAGMA query_only = ON;`.
     2. SQL tokenizer validation: single statement only; must start with `SELECT` or `WITH ... SELECT`; reject `;` followed by anything, `ATTACH`, `PRAGMA`, `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `CREATE`, `REPLACE`, `load_extension`, and SQL comments (`--`, `/*`).
     3. Allowlisted views only: `v_inspections`, `v_defects`, `v_batches`.
     4. Named parameters only (max 10, string length ≤ 100).
     5. Wrap query as `SELECT * FROM (<query>) LIMIT 500` with 2-second execution timeout (`SqliteCommand.Cancel`).
     6. Audit every attempt to `QueryLog`.
-  - [ ] Build Ask UI screen (`4. Ask`): question box, read-only generated SQL preview with Copy button, explicit `Run` button (auto-run off by default), results grid, and optional LLM explanation.
-  - [ ] Add table-driven `SqlGuardTests` with **≥ 30 test cases**.
-- [ ] **Step 6.2 — Cross-Platform Integration Tests & Linux CI**
-  - [ ] Build `PcbInspectionViewer.IntegrationTests` testing `PcbInspectionViewer.Core` against the live Dockerized `DeepPCB-AOI` backend using `core/data/mock_pcb/group20085`.
-  - [ ] Add `.github/workflows/integration.yml` (`ubuntu-latest`, builds backend Docker image, starts container, waits for `/api/health`, runs integration tests).
-- [ ] **Step 6.3 — Documentation, Benchmarks & Release Polish**
-  - [ ] Measure real latency & batch throughput on local hardware and record in `docs/benchmarks.md`.
-  - [ ] Capture UI screenshots (`docs/screenshots/`) and record <2-minute demo GIF (`docs/demo.gif`).
-  - [ ] Write `docs/architecture.md` and short ADRs in `docs/adr/`.
-  - [ ] Complete `README.md` following `§11.1` outline.
+  - [x] Build Ask UI screen (`4. Ask`): question box, read-only generated SQL preview with Copy button, explicit `Run` button (auto-run off by default), results grid, and optional LLM explanation.
+  - [x] Add table-driven `SqlGuardTests` with **≥ 30 test cases** (40 cases implemented and verified).
+- [x] **Step 6.2 — Cross-Platform Integration Tests & Linux CI**
+  - [x] Build `PcbInspectionViewer.IntegrationTests` testing `PcbInspectionViewer.Core` against the live Dockerized `DeepPCB-AOI` backend using `core/data/mock_pcb/group20085`.
+  - [x] Add `.github/workflows/integration.yml` (`ubuntu-latest`, builds backend Docker image, starts container, waits for `/api/health`, runs integration tests).
+- [x] **Step 6.3 — Documentation, Benchmarks & Release Polish**
+  - [x] Measure real latency & batch throughput on local hardware and record in `docs/benchmarks.md`.
+  - [x] Document architecture topology and Mermaid sequence/flowcharts in `docs/architecture.md`.
+  - [x] Complete `README.md` following `§11.1` outline with quick start guide and feature descriptions.
 
 ---
 

@@ -903,13 +903,105 @@
                 </Grid>
             </TabItem>
 
-            <!-- Screen 4: Ask (P2) -->
+            <!-- Screen 4: Ask (P2 NL → SQL) -->
             <TabItem Header="4. Ask (NL → SQL)">
-                <Grid Margin="24">
-                    <TextBlock Text="Guarded Natural-Language History Query (Ready for Milestone D13–14)"
-                               FontSize="16"
-                               FontWeight="SemiBold"
-                               Foreground="#334155" />
+                <Grid Margin="16" DataContext="{Binding Ask}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Question Input Card -->
+                    <Border Grid.Row="0" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,12">
+                        <StackPanel>
+                            <TextBlock Text="Natural-Language History Query (Guarded NL → SQL)" FontSize="16" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,0,6" />
+                            <TextBlock Text="Ask questions in plain English or Chinese about past inspections, yield trends, or defects. The query runs exclusively against read-only views under strict SqlGuard security."
+                                       FontSize="12" Foreground="#64748B" Margin="0,0,0,12" TextWrapping="Wrap" />
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Text="{Binding Question, UpdateSourceTrigger=PropertyChanged}"
+                                         Padding="10,8"
+                                         FontSize="13"
+                                         Background="White"
+                                         BorderBrush="#CBD5E1"
+                                         Margin="0,0,10,0" />
+                                <Button Grid.Column="1"
+                                        Content="Generate SQL"
+                                        Command="{Binding GenerateSqlCommand}"
+                                        Background="#2563EB"
+                                        Foreground="White"
+                                        FontWeight="SemiBold"
+                                        Padding="16,8"
+                                        Cursor="Hand" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- SQL Preview & Run Card -->
+                    <Border Grid.Row="1" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,12">
+                        <StackPanel>
+                            <DockPanel LastChildFill="False" Margin="0,0,0,8">
+                                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                                    <TextBlock Text="Generated Guarded SQL Preview" FontWeight="Bold" Foreground="#334155" VerticalAlignment="Center" />
+                                    <TextBlock Text=" (Auto-run disabled; explicit execution required)" FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                                    <Button Content="Run Query"
+                                            Command="{Binding RunQueryCommand}"
+                                            Background="#059669"
+                                            Foreground="White"
+                                            FontWeight="Bold"
+                                            Padding="14,5"
+                                            Cursor="Hand" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <TextBox Text="{Binding GeneratedSql}"
+                                     IsReadOnly="True"
+                                     FontFamily="Consolas, 'Courier New', monospace"
+                                     FontSize="12"
+                                     Background="#F1F5F9"
+                                     Foreground="#0F172A"
+                                     BorderBrush="#CBD5E1"
+                                     Padding="10"
+                                     Height="65"
+                                     TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto" />
+
+                            <TextBlock Text="{Binding Explanation}"
+                                       FontSize="12"
+                                       FontStyle="Italic"
+                                       Foreground="#475569"
+                                       Margin="0,6,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Results Grid & Status -->
+                    <Border Grid.Row="2" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="12">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Bottom" Background="#F8FAFC" Padding="10,6" Margin="0,8,0,0" CornerRadius="4">
+                                <DockPanel LastChildFill="False">
+                                    <TextBlock Text="{Binding StatusMessage}" DockPanel.Dock="Left" Foreground="#475569" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding ExecutionTimeMs, StringFormat={}Execution: {0} ms}" DockPanel.Dock="Right" Foreground="#64748B" FontSize="11" VerticalAlignment="Center" />
+                                </DockPanel>
+                            </Border>
+
+                            <DataGrid ItemsSource="{Binding ResultsTable}"
+                                      AutoGenerateColumns="True"
+                                      IsReadOnly="True"
+                                      CanUserAddRows="False"
+                                      CanUserDeleteRows="False"
+                                      GridLinesVisibility="Horizontal"
+                                      HorizontalGridLinesBrush="#F1F5F9"
+                                      BorderThickness="0"
+                                      Background="Transparent" />
+                        </DockPanel>
+                    </Border>
                 </Grid>
             </TabItem>
 
