@@ -36,7 +36,8 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
     public MainShellViewModel(
         ISettingsService settingsService,
         IBackendHealthMonitor healthMonitor,
-        SettingsViewModel settingsViewModel)
+        SettingsViewModel settingsViewModel,
+        InspectViewModel? inspectViewModel = null)
     {
         ArgumentNullException.ThrowIfNull(settingsService);
         ArgumentNullException.ThrowIfNull(healthMonitor);
@@ -45,6 +46,7 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
         _settingsService = settingsService;
         _healthMonitor = healthMonitor;
         Settings = settingsViewModel;
+        Inspect = inspectViewModel;
 
         DatabasePathText = _settingsService.DatabaseFilePath;
 
@@ -53,11 +55,16 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
     }
 
     public SettingsViewModel Settings { get; }
+    public InspectViewModel? Inspect { get; }
+
+    [RelayCommand]
+    private void OpenSettingsTab() => SelectedTabIndex = 4;
 
     public async Task InitializeAsync(CancellationToken ct = default)
     {
         StationSettings loaded = await _settingsService.LoadAsync(ct);
         Settings.ApplyFrom(loaded);
+        Inspect?.ApplySettingsDefaults(loaded);
         UpdateLlmStatusText(loaded.Llm);
 
         await RefreshHealthAsync(ct);
@@ -98,6 +105,7 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
 
     private void OnSettingsSaved(object? sender, StationSettings updated)
     {
+        Inspect?.ApplySettingsDefaults(updated);
         UpdateLlmStatusText(updated.Llm);
         _ = RefreshHealthAsync();
     }

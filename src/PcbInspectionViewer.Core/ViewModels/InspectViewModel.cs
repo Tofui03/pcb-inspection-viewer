@@ -1,14 +1,14 @@
 using System.Collections.ObjectModel;
-using System.Net;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PcbInspectionViewer.Core.Api;
 using PcbInspectionViewer.Core.Api.Dtos;
 using PcbInspectionViewer.Core.Configuration;
+using PcbInspectionViewer.Core.Geometry;
 
 namespace PcbInspectionViewer.Core.ViewModels;
 
-public sealed partial class InspectViewModel : ObservableObject
+public sealed partial class InspectViewModel : ObservableObject, IDisposable
 {
     private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -18,6 +18,7 @@ public sealed partial class InspectViewModel : ObservableObject
     private readonly IInspectionApiClient _apiClient;
     private readonly ISettingsService _settingsService;
     private CancellationTokenSource? _inspectCts;
+    private string? _baseUrlOverride;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(InspectCommand))]
@@ -34,6 +35,7 @@ public sealed partial class InspectViewModel : ObservableObject
     private string _ipcClass = "Class 2";
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(InspectCommand))]
     private bool _cleanBoardMode;
 
     [ObservableProperty]
@@ -72,6 +74,18 @@ public sealed partial class InspectViewModel : ObservableObject
     private string _activeImageLayer = "Test";
 
     [ObservableProperty]
+    private bool _showBoundingBoxes = true;
+
+    [ObservableProperty]
+    private double _zoomFactor = 1.0;
+
+    [ObservableProperty]
+    private double _panX;
+
+    [ObservableProperty]
+    private double _panY;
+
+    [ObservableProperty]
     private string? _activeImageDataUri;
 
     [ObservableProperty]
@@ -85,13 +99,30 @@ public sealed partial class InspectViewModel : ObservableObject
 
     public ObservableCollection<BoundingBoxDetectionDto> Detections { get; } = new();
     public ObservableCollection<InspectionDecisionDto> Decisions { get; } = new();
+    public ObservableCollection<AlignedDefectDecision> AlignedDefects { get; } = new();
 
-    public IReadOnlyList<string> AllowedIpcClasses { get; } = new[] { "Class 2", "Class 3" };
+    public IReadOnlyList<string> AllowedIpcClasses => BatchOptions.AllowedIpcClasses;
 
     public InspectViewModel(IInspectionApiClient apiClient, ISettingsService settingsService)
     {
         _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
+    }
+
+    partial void OnTemplateImagePathChanged(string value)
+    {
+        if (CleanBoardMode && !string.IsNullOrWhiteSpace(value))
+        {
+            TestImagePath = value;
+        }
+    }
+
+    partial void OnCleanBoardModeChanged(bool value)
+    {
+        if (value && !string.IsNullOrWhiteSpace(TemplateImagePath))
+        {
+            TestImagePath = TemplateImagePath;
+        }
     }
 
     public static bool IsSupportedImageFile(string? pathOrFileName)
@@ -105,29 +136,59 @@ public sealed partial class InspectViewModel : ObservableObject
         return SupportedExtensions.Contains(ext);
     }
 
-    public async Task InitializeFromSettingsAsync(CancellationToken cancellationToken = default)
+    public bool TrySetImagePathFromDrop(string? filePath, bool isTemplate = false)
     {
-        StationSettings settings = await _settingsService.LoadAsync(cancellationToken);
+        if (!IsSupportedImageFile(filePath) || string.IsNullOrWhiteSpace(filePath))
+        {
+            HasError = true;
+            StatusOrErrorMessage = "Unsupported image format. Please select a .jpg, .jpeg, .png, or .bmp file.";
+            return false;
+        }
+
+        HasError = false;
+        if (isTemplate)
+        {
+            TemplateImagePath = filePath;
+            StatusOrErrorMessage = $"Golden template set: {Path.GetFileName(filePath)}";
+        }
+        else
+        {
+            TestImagePath = filePath;
+            StatusOrErrorMessage = $"Test image set: {Path.GetFileName(filePath)}";
+        }
+
+        return true;
+    }
+
+    public void ApplySettingsDefaults(StationSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        _baseUrlOverride = settings.Api.BaseUrl;
+
         if (string.IsNullOrWhiteSpace(BatchId) || BatchId == "BATCH-UPLOAD")
         {
             BatchId = settings.Batch.DefaultBatchId;
         }
 
-        if (string.IsNullOrWhiteSpace(IpcClass))
-        {
-            IpcClass = settings.Batch.DefaultIpcClass;
-        }
-
+        IpcClass = settings.Batch.DefaultIpcClass;
         ColorizePcb = settings.Batch.ColorizePcb;
+    }
+
+    public async Task InitializeFromSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        StationSettings settings = await _settingsService.LoadAsync(cancellationToken);
+        ApplySettingsDefaults(settings);
     }
 
     private bool CanInspect()
     {
+        string effectiveTestPath = CleanBoardMode ? TemplateImagePath : TestImagePath;
         return !IsBusy &&
                !string.IsNullOrWhiteSpace(TemplateImagePath) &&
                File.Exists(TemplateImagePath) &&
-               !string.IsNullOrWhiteSpace(TestImagePath) &&
-               File.Exists(TestImagePath);
+               !string.IsNullOrWhiteSpace(effectiveTestPath) &&
+               File.Exists(effectiveTestPath);
     }
 
     private bool CanCancelInspect() => IsBusy;
@@ -144,21 +205,24 @@ public sealed partial class InspectViewModel : ObservableObject
 
         try
         {
-            byte[] templateBytes = await File.ReadAllBytesAsync(TemplateImagePath, _inspectCts.Token).ConfigureAwait(false);
-            byte[] testBytes = await File.ReadAllBytesAsync(TestImagePath, _inspectCts.Token).ConfigureAwait(false);
+            string effectiveTestPath = CleanBoardMode ? TemplateImagePath : TestImagePath;
+
+            byte[] templateBytes = await File.ReadAllBytesAsync(TemplateImagePath, _inspectCts.Token);
+            byte[] testBytes = await File.ReadAllBytesAsync(effectiveTestPath, _inspectCts.Token);
 
             var request = new UploadTriageRequest(
                 TemplateBytes: templateBytes,
                 TemplateFileName: Path.GetFileName(TemplateImagePath),
                 TestBytes: testBytes,
-                TestFileName: Path.GetFileName(TestImagePath),
+                TestFileName: Path.GetFileName(effectiveTestPath),
                 BatchId: BatchId,
                 IpcClass: IpcClass,
                 SimulateRogueVlm: SimulateRogueVlm,
                 ColorizePcb: ColorizePcb,
-                ReturnImages: true);
+                ReturnImages: true,
+                BaseUrlOverride: _baseUrlOverride);
 
-            UploadTriageEnvelope envelope = await _apiClient.UploadTriageAsync(request, _inspectCts.Token).ConfigureAwait(false);
+            UploadTriageEnvelope envelope = await _apiClient.UploadTriageAsync(request, _inspectCts.Token);
             ApplyInspectionResult(envelope);
             HasResult = true;
             StatusOrErrorMessage = "Inspection completed successfully.";
@@ -179,6 +243,8 @@ public sealed partial class InspectViewModel : ObservableObject
         }
         finally
         {
+            _inspectCts?.Dispose();
+            _inspectCts = null;
             IsBusy = false;
         }
     }
@@ -209,10 +275,19 @@ public sealed partial class InspectViewModel : ObservableObject
         };
     }
 
+    [RelayCommand]
+    private void ResetZoomAndPan()
+    {
+        ZoomFactor = 1.0;
+        PanX = 0.0;
+        PanY = 0.0;
+    }
+
     private void ApplyInspectionResult(UploadTriageEnvelope envelope)
     {
         UploadTriageResponseDto dto = envelope.Response;
 
+        // Deterministic rule: display server board_disposition verbatim; never recompute or override.
         VerdictText = dto.BoardDisposition.ToUpperInvariant();
         IsLineHalted = dto.LineHalted;
         Stage1LatencyMs = dto.Report?.Stage1LatencyMs ?? 0;
@@ -225,21 +300,30 @@ public sealed partial class InspectViewModel : ObservableObject
         SelectLayer(ActiveImageLayer);
 
         Detections.Clear();
-        if (dto.Report?.Detections is not null)
+        IReadOnlyList<BoundingBoxDetectionDto> rawDetections = dto.Report?.Detections ?? [];
+        foreach (BoundingBoxDetectionDto detection in rawDetections)
         {
-            foreach (BoundingBoxDetectionDto detection in dto.Report.Detections)
-            {
-                Detections.Add(detection);
-            }
+            Detections.Add(detection);
         }
 
         Decisions.Clear();
-        if (dto.Report?.Decisions is not null)
+        IReadOnlyList<InspectionDecisionDto> rawDecisions = dto.Report?.Decisions ?? [];
+        foreach (InspectionDecisionDto decision in rawDecisions)
         {
-            foreach (InspectionDecisionDto decision in dto.Report.Decisions)
-            {
-                Decisions.Add(decision);
-            }
+            Decisions.Add(decision);
         }
+
+        AlignedDefects.Clear();
+        foreach (AlignedDefectDecision aligned in OverlayGeometryCalculator.PairDetectionsWithDecisions(rawDetections, rawDecisions))
+        {
+            AlignedDefects.Add(aligned);
+        }
+    }
+
+    public void Dispose()
+    {
+        _inspectCts?.Cancel();
+        _inspectCts?.Dispose();
+        _inspectCts = null;
     }
 }

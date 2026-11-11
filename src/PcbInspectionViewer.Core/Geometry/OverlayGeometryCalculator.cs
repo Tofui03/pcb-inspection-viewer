@@ -3,6 +3,13 @@ using PcbInspectionViewer.Core.Api.Dtos;
 
 namespace PcbInspectionViewer.Core.Geometry;
 
+public sealed record OverlayBoardViewport(
+    double Left,
+    double Top,
+    double Width,
+    double Height,
+    double EffectiveScale);
+
 public sealed record OverlayBoxProjection(
     double Left,
     double Top,
@@ -22,16 +29,13 @@ public static class OverlayGeometryCalculator
 {
     public const double BoardDimensionPx = 640.0;
 
-    public static OverlayBoxProjection ProjectBox(
-        BoundingBoxDetectionDto box,
+    public static OverlayBoardViewport ProjectBoardViewport(
         double viewportWidth,
         double viewportHeight,
         double zoomFactor = 1.0,
         double panX = 0.0,
         double panY = 0.0)
     {
-        ArgumentNullException.ThrowIfNull(box);
-
         double safeViewportWidth = Math.Max(1.0, viewportWidth);
         double safeViewportHeight = Math.Max(1.0, viewportHeight);
         double safeZoom = Math.Clamp(zoomFactor, 0.25, 16.0);
@@ -48,10 +52,35 @@ public static class OverlayGeometryCalculator
 
         double effectiveScale = uniformScale * safeZoom;
 
-        double left = (letterboxOffsetX * safeZoom) + (box.X1 * effectiveScale) + panX;
-        double top = (letterboxOffsetY * safeZoom) + (box.Y1 * effectiveScale) + panY;
-        double width = Math.Max(0.0, (box.X2 - box.X1) * effectiveScale);
-        double height = Math.Max(0.0, (box.Y2 - box.Y1) * effectiveScale);
+        return new OverlayBoardViewport(
+            Left: (letterboxOffsetX * safeZoom) + panX,
+            Top: (letterboxOffsetY * safeZoom) + panY,
+            Width: displayedBoardWidth * safeZoom,
+            Height: displayedBoardHeight * safeZoom,
+            EffectiveScale: effectiveScale);
+    }
+
+    public static OverlayBoxProjection ProjectBox(
+        BoundingBoxDetectionDto box,
+        double viewportWidth,
+        double viewportHeight,
+        double zoomFactor = 1.0,
+        double panX = 0.0,
+        double panY = 0.0)
+    {
+        ArgumentNullException.ThrowIfNull(box);
+
+        OverlayBoardViewport board = ProjectBoardViewport(
+            viewportWidth,
+            viewportHeight,
+            zoomFactor,
+            panX,
+            panY);
+
+        double left = board.Left + (box.X1 * board.EffectiveScale);
+        double top = board.Top + (box.Y1 * board.EffectiveScale);
+        double width = Math.Max(0.0, (box.X2 - box.X1) * board.EffectiveScale);
+        double height = Math.Max(0.0, (box.Y2 - box.Y1) * board.EffectiveScale);
 
         string label = string.Create(
             CultureInfo.InvariantCulture,

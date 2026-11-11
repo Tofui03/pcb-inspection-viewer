@@ -72,9 +72,10 @@ public sealed class InspectViewModelTests : IDisposable
         sut.RoundTripMs.Should().BeApproximately(112.4, 0.01);
         sut.Detections.Should().HaveCount(3);
         sut.Decisions.Should().HaveCount(3);
-        sut.Decisions[0].DefectClass.Should().Be("Short");
-        sut.Decisions[0].Disposition.Should().Be("SCRAP");
-        sut.Decisions[0].Severity.Should().Be("CRITICAL");
+        sut.AlignedDefects.Should().HaveCount(3);
+        sut.AlignedDefects[0].Decision!.DefectClass.Should().Be("Short");
+        sut.AlignedDefects[0].Decision!.Disposition.Should().Be("SCRAP");
+        sut.AlignedDefects[0].Decision!.Severity.Should().Be("CRITICAL");
 
         // Layer switching: Test -> Template -> Diff
         sut.ActiveImageLayer.Should().Be("Test");
@@ -155,6 +156,35 @@ public sealed class InspectViewModelTests : IDisposable
     public void IsSupportedImageFile_ChecksAllowedExtensionsPerF1(string fileName, bool expected)
     {
         InspectViewModel.IsSupportedImageFile(fileName).Should().Be(expected);
+    }
+
+    [Fact]
+    public void CleanBoardMode_WhenEnabled_UsesTemplatePathAsTestPath()
+    {
+        var apiClient = Substitute.For<IInspectionApiClient>();
+        var settingsService = Substitute.For<ISettingsService>();
+        var sut = new InspectViewModel(apiClient, settingsService)
+        {
+            TemplateImagePath = _templatePath,
+            CleanBoardMode = true
+        };
+
+        sut.TestImagePath.Should().Be(_templatePath);
+        sut.InspectCommand.CanExecute(null).Should().BeTrue();
+    }
+
+    [Fact]
+    public void TrySetImagePathFromDrop_RejectsUnsupportedFormatWithClearError()
+    {
+        var apiClient = Substitute.For<IInspectionApiClient>();
+        var settingsService = Substitute.For<ISettingsService>();
+        var sut = new InspectViewModel(apiClient, settingsService);
+
+        bool accepted = sut.TrySetImagePathFromDrop("/tmp/not-an-image.pdf");
+
+        accepted.Should().BeFalse();
+        sut.HasError.Should().BeTrue();
+        sut.StatusOrErrorMessage.Should().Contain("Unsupported image format");
     }
 
     public void Dispose()

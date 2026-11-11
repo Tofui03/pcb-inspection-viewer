@@ -147,6 +147,39 @@ public sealed class InspectionApiClientTests
         result.Response.BoardDisposition.Should().Be("SCRAP");
     }
 
+    [Fact]
+    public async Task UploadTriageAsync_OnTransientHttpRequestException_RetriesUpToTwoTimesAndSucceedsOnThirdAttempt()
+    {
+        string fixtureJson = await File.ReadAllTextAsync(GetFixturePath());
+        int attempts = 0;
+
+        var handler = new StubHttpMessageHandler((_, _) =>
+        {
+            attempts++;
+            if (attempts <= 2)
+            {
+                throw new HttpRequestException("Connection reset by peer");
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(fixtureJson, Encoding.UTF8, "application/json")
+            });
+        });
+
+        using var httpClient = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("http://localhost:8000")
+        };
+        var sut = new InspectionApiClient(httpClient, retryDelayProvider: _ => TimeSpan.Zero);
+
+        var request = new UploadTriageRequest([1], "tpl.png", [2], "tst.png", "BATCH-1", "Class 2");
+        UploadTriageEnvelope result = await sut.UploadTriageAsync(request);
+
+        attempts.Should().Be(3);
+        result.Response.BoardDisposition.Should().Be("SCRAP");
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.BadRequest, """{"detail":"Failed to decode uploaded image files."}""")]
     [InlineData(HttpStatusCode.UnprocessableEntity, """{"detail":[{"msg":"Field required"}]}""")]

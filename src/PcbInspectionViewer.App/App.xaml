@@ -4,6 +4,8 @@
              xmlns:converters="clr-namespace:PcbInspectionViewer.App.Converters">
     <Application.Resources>
         <converters:OnlineToStatusBrushConverter x:Key="OnlineToStatusBrushConverter" />
+        <converters:VerdictToBrushConverter x:Key="VerdictToBrushConverter" />
+        <converters:VerdictToDisplayLabelConverter x:Key="VerdictToDisplayLabelConverter" />
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </Application.Resources>
 </Application>

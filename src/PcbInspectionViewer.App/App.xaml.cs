@@ -58,7 +58,14 @@ public partial class App : Application
                     client.Timeout = TimeSpan.FromSeconds(5);
                 });
 
+                services.AddHttpClient<IInspectionApiClient, InspectionApiClient>(client =>
+                {
+                    client.BaseAddress = new Uri("http://localhost:8000");
+                    client.Timeout = TimeSpan.FromSeconds(30);
+                });
+
                 services.AddSingleton<SettingsViewModel>();
+                services.AddSingleton<InspectViewModel>();
                 services.AddSingleton<MainShellViewModel>();
                 services.AddSingleton<MainWindow>();
             })
