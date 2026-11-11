@@ -1,0 +1,245 @@
+using System.Collections.ObjectModel;
+using System.Net;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using PcbInspectionViewer.Core.Api;
+using PcbInspectionViewer.Core.Api.Dtos;
+using PcbInspectionViewer.Core.Configuration;
+
+namespace PcbInspectionViewer.Core.ViewModels;
+
+public sealed partial class InspectViewModel : ObservableObject
+{
+    private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg", ".jpeg", ".png", ".bmp"
+    };
+
+    private readonly IInspectionApiClient _apiClient;
+    private readonly ISettingsService _settingsService;
+    private CancellationTokenSource? _inspectCts;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(InspectCommand))]
+    private string _templateImagePath = string.Empty;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(InspectCommand))]
+    private string _testImagePath = string.Empty;
+
+    [ObservableProperty]
+    private string _batchId = "BATCH-UPLOAD";
+
+    [ObservableProperty]
+    private string _ipcClass = "Class 2";
+
+    [ObservableProperty]
+    private bool _cleanBoardMode;
+
+    [ObservableProperty]
+    private bool _simulateRogueVlm;
+
+    [ObservableProperty]
+    private bool _colorizePcb;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(InspectCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CancelInspectCommand))]
+    private bool _isBusy;
+
+    [ObservableProperty]
+    private bool _hasResult;
+
+    [ObservableProperty]
+    private bool _hasError;
+
+    [ObservableProperty]
+    private string _statusOrErrorMessage = string.Empty;
+
+    [ObservableProperty]
+    private string _verdictText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isLineHalted;
+
+    [ObservableProperty]
+    private double _stage1LatencyMs;
+
+    [ObservableProperty]
+    private double _roundTripMs;
+
+    [ObservableProperty]
+    private string _activeImageLayer = "Test";
+
+    [ObservableProperty]
+    private string? _activeImageDataUri;
+
+    [ObservableProperty]
+    private string? _templateImageB64;
+
+    [ObservableProperty]
+    private string? _testImageB64;
+
+    [ObservableProperty]
+    private string? _diffImageB64;
+
+    public ObservableCollection<BoundingBoxDetectionDto> Detections { get; } = new();
+    public ObservableCollection<InspectionDecisionDto> Decisions { get; } = new();
+
+    public IReadOnlyList<string> AllowedIpcClasses { get; } = new[] { "Class 2", "Class 3" };
+
+    public InspectViewModel(IInspectionApiClient apiClient, ISettingsService settingsService)
+    {
+        _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
+        _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
+    }
+
+    public static bool IsSupportedImageFile(string? pathOrFileName)
+    {
+        if (string.IsNullOrWhiteSpace(pathOrFileName))
+        {
+            return false;
+        }
+
+        string ext = Path.GetExtension(pathOrFileName);
+        return SupportedExtensions.Contains(ext);
+    }
+
+    public async Task InitializeFromSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        StationSettings settings = await _settingsService.LoadAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(BatchId) || BatchId == "BATCH-UPLOAD")
+        {
+            BatchId = settings.Batch.DefaultBatchId;
+        }
+
+        if (string.IsNullOrWhiteSpace(IpcClass))
+        {
+            IpcClass = settings.Batch.DefaultIpcClass;
+        }
+
+        ColorizePcb = settings.Batch.ColorizePcb;
+    }
+
+    private bool CanInspect()
+    {
+        return !IsBusy &&
+               !string.IsNullOrWhiteSpace(TemplateImagePath) &&
+               File.Exists(TemplateImagePath) &&
+               !string.IsNullOrWhiteSpace(TestImagePath) &&
+               File.Exists(TestImagePath);
+    }
+
+    private bool CanCancelInspect() => IsBusy;
+
+    [RelayCommand(CanExecute = nameof(CanInspect))]
+    private async Task InspectAsync()
+    {
+        IsBusy = true;
+        HasError = false;
+        StatusOrErrorMessage = "Inspecting board...";
+
+        _inspectCts?.Dispose();
+        _inspectCts = new CancellationTokenSource();
+
+        try
+        {
+            byte[] templateBytes = await File.ReadAllBytesAsync(TemplateImagePath, _inspectCts.Token).ConfigureAwait(false);
+            byte[] testBytes = await File.ReadAllBytesAsync(TestImagePath, _inspectCts.Token).ConfigureAwait(false);
+
+            var request = new UploadTriageRequest(
+                TemplateBytes: templateBytes,
+                TemplateFileName: Path.GetFileName(TemplateImagePath),
+                TestBytes: testBytes,
+                TestFileName: Path.GetFileName(TestImagePath),
+                BatchId: BatchId,
+                IpcClass: IpcClass,
+                SimulateRogueVlm: SimulateRogueVlm,
+                ColorizePcb: ColorizePcb,
+                ReturnImages: true);
+
+            UploadTriageEnvelope envelope = await _apiClient.UploadTriageAsync(request, _inspectCts.Token).ConfigureAwait(false);
+            ApplyInspectionResult(envelope);
+            HasResult = true;
+            StatusOrErrorMessage = "Inspection completed successfully.";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusOrErrorMessage = "Inspection Cancelled by operator.";
+        }
+        catch (InspectionApiException ex)
+        {
+            HasError = true;
+            StatusOrErrorMessage = $"Inspection API error ({(int)ex.StatusCode}): {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            HasError = true;
+            StatusOrErrorMessage = $"Inspection error: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanCancelInspect))]
+    private void CancelInspect()
+    {
+        if (_inspectCts is not null && !_inspectCts.IsCancellationRequested)
+        {
+            _inspectCts.Cancel();
+        }
+    }
+
+    [RelayCommand]
+    private void SelectLayer(string? layerName)
+    {
+        if (string.IsNullOrWhiteSpace(layerName))
+        {
+            return;
+        }
+
+        ActiveImageLayer = layerName;
+        ActiveImageDataUri = layerName switch
+        {
+            "Template" => TemplateImageB64,
+            "Diff" => DiffImageB64,
+            _ => TestImageB64
+        };
+    }
+
+    private void ApplyInspectionResult(UploadTriageEnvelope envelope)
+    {
+        UploadTriageResponseDto dto = envelope.Response;
+
+        VerdictText = dto.BoardDisposition.ToUpperInvariant();
+        IsLineHalted = dto.LineHalted;
+        Stage1LatencyMs = dto.Report?.Stage1LatencyMs ?? 0;
+        RoundTripMs = envelope.RoundTripMs;
+
+        TemplateImageB64 = dto.TemplateB64;
+        TestImageB64 = dto.TestB64;
+        DiffImageB64 = dto.DiffB64;
+
+        SelectLayer(ActiveImageLayer);
+
+        Detections.Clear();
+        if (dto.Report?.Detections is not null)
+        {
+            foreach (BoundingBoxDetectionDto detection in dto.Report.Detections)
+            {
+                Detections.Add(detection);
+            }
+        }
+
+        Decisions.Clear();
+        if (dto.Report?.Decisions is not null)
+        {
+            foreach (InspectionDecisionDto decision in dto.Report.Decisions)
+            {
+                Decisions.Add(decision);
+            }
+        }
+    }
+}

@@ -84,21 +84,21 @@
 
 *Acceptance Criteria: Inspecting mock board `20085000` shows boxes aligned to defects at any window size; verdict equals server `board_disposition`; Cancel works mid-request; API-down shows error not crash; ≥ 15 unit tests.*
 
-- [ ] **Step 3.1 — Typed API Client & DTOs**
-  - [ ] Create exact DTOs in `PcbInspectionViewer.Core/Api/Dtos/` matching `/api/upload-triage` response (`BoardInspectionReport`, `BoundingBoxDetection`, `InspectionDecision`, `BatchTrendResult`).
-  - [ ] Implement `IInspectionApiClient` / `InspectionApiClient` with `HttpClient` + Polly resilience (retry up to 2 times with jitter on connect/502/503/504; no retry on 400/422).
+- [x] **Step 3.1 — Typed API Client & DTOs**
+  - [x] Create exact DTOs in `PcbInspectionViewer.Core/Api/Dtos/` matching `/api/upload-triage` response (`BoardInspectionReport`, `BoundingBoxDetection`, `InspectionDecision`, `BatchTrendResult`).
+  - [x] Implement `IInspectionApiClient` / `InspectionApiClient` with `HttpClient` + Polly resilience (retry up to 2 times with jitter on connect/502/503/504; no retry on 400/422).
 - [ ] **Step 3.2 — Inspect View & ViewModel (`F1`)**
   - [ ] Inputs panel: Golden template picker (remembered per session), test image picker (file dialog + drag-and-drop for `.jpg/.jpeg/.png/.bmp`), `batch_id`, `IPC Class 2/3`, `Inspect` & `Cancel` buttons.
   - [ ] Keyboard shortcuts: `Ctrl+O` open, `F5` inspect, `Esc` cancel.
   - [ ] Right panel: Verdict badge (`PASS` green, `REWORK` amber, `SCRAP` red + text/icon), `line_halted` banner, Stage-1 latency + round-trip ms, and `InspectionDecision` list (severity, IPC clause, risk, root cause, corrective action, guardrail override reason).
 - [ ] **Step 3.3 — `DefectOverlayCanvas` Control**
-  - [ ] Scale 640×640 bounding box coordinates accurately to displayed image geometry at any window size / DPI.
+  - [x] Scale 640×640 bounding box coordinates accurately to displayed image geometry at any window size / DPI.
   - [ ] Support zoom/pan and layer toggles (`Test` / `Template` / `Diff Heatmap` / `Boxes`).
-  - [ ] Colour-code boxes per defect class with `<Class> <confidence:0.00>` labels.
+  - [x] Colour-code boxes per defect class with `<Class> <confidence:0.00>` labels.
 - [ ] **Step 3.4 — Unit Tests (D4–7)**
-  - [ ] `InspectionApiClient` tests with fake `HttpMessageHandler` + recorded `tests/fixtures/upload_triage_sample.json`.
-  - [ ] `InspectViewModel` tests (command disable during run, cancellation token trigger, exact verdict mapping, API error handling).
-  - [ ] Overlay geometry 640→display scaling and zoom math unit tests.
+  - [x] `InspectionApiClient` tests with fake `HttpMessageHandler` + recorded `tests/fixtures/upload_triage_sample.json`.
+  - [x] `InspectViewModel` tests (command disable during run, cancellation token trigger, exact verdict mapping, API error handling).
+  - [x] Overlay geometry 640→display scaling and zoom math unit tests.
 
 ---
 
