@@ -56,11 +56,11 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
 
     public async Task InitializeAsync(CancellationToken ct = default)
     {
-        StationSettings loaded = await _settingsService.LoadAsync(ct).ConfigureAwait(false);
+        StationSettings loaded = await _settingsService.LoadAsync(ct);
         Settings.ApplyFrom(loaded);
         UpdateLlmStatusText(loaded.Llm);
 
-        await RefreshHealthAsync(ct).ConfigureAwait(false);
+        await RefreshHealthAsync(ct);
     }
 
     public void StartPeriodicHealthPolling(TimeSpan interval)
@@ -70,27 +70,29 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
             return;
         }
 
-        _pollingTask = Task.Run(async () =>
+        _pollingTask = RunPeriodicHealthLoopAsync(interval, _pollingCts.Token);
+    }
+
+    private async Task RunPeriodicHealthLoopAsync(TimeSpan interval, CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(interval);
+        try
         {
-            using var timer = new PeriodicTimer(interval);
-            try
+            while (await timer.WaitForNextTickAsync(ct))
             {
-                while (await timer.WaitForNextTickAsync(_pollingCts.Token).ConfigureAwait(false))
-                {
-                    await RefreshHealthAsync(_pollingCts.Token).ConfigureAwait(false);
-                }
+                await RefreshHealthAsync(ct);
             }
-            catch (OperationCanceledException)
-            {
-                // Clean shutdown.
-            }
-        });
+        }
+        catch (OperationCanceledException)
+        {
+            // Clean shutdown.
+        }
     }
 
     [RelayCommand]
     public async Task RefreshHealthAsync(CancellationToken ct = default)
     {
-        BackendHealthStatus status = await _healthMonitor.CheckHealthAsync(Settings.BaseUrl, ct).ConfigureAwait(false);
+        BackendHealthStatus status = await _healthMonitor.CheckHealthAsync(Settings.BaseUrl, ct);
         ApplyHealthStatus(status);
     }
 

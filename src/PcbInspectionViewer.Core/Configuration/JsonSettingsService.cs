@@ -10,26 +10,6 @@ public sealed class JsonSettingsService : ISettingsService
         PropertyNamingPolicy = null
     };
 
-    private static readonly HashSet<string> AllowedIpcClasses = new(StringComparer.Ordinal)
-    {
-        "Class 2",
-        "Class 3"
-    };
-
-    private static readonly HashSet<string> AllowedLlmProviders = new(StringComparer.Ordinal)
-    {
-        "None",
-        "Gemini",
-        "OpenAI"
-    };
-
-    private static readonly HashSet<string> AllowedSummaryLanguages = new(StringComparer.Ordinal)
-    {
-        "en",
-        "zh",
-        "en+zh"
-    };
-
     public JsonSettingsService(string? settingsFilePath = null)
     {
         if (!string.IsNullOrWhiteSpace(settingsFilePath))
@@ -127,7 +107,7 @@ public sealed class JsonSettingsService : ISettingsService
             errors.Add("Batch Concurrency must be between 1 and 8.");
         }
 
-        if (!AllowedIpcClasses.Contains(settings.Batch.DefaultIpcClass))
+        if (!BatchOptions.AllowedIpcClasses.Contains(settings.Batch.DefaultIpcClass, StringComparer.Ordinal))
         {
             errors.Add("Default IPC Class must be 'Class 2' or 'Class 3'.");
         }
@@ -137,12 +117,12 @@ public sealed class JsonSettingsService : ISettingsService
             errors.Add("Default Batch ID cannot be empty.");
         }
 
-        if (!AllowedLlmProviders.Contains(settings.Llm.Provider))
+        if (!LlmOptions.AllowedProviders.Contains(settings.Llm.Provider, StringComparer.Ordinal))
         {
             errors.Add("LLM Provider must be 'None', 'Gemini', or 'OpenAI'.");
         }
 
-        if (!AllowedSummaryLanguages.Contains(settings.Llm.SummaryLanguage))
+        if (!LlmOptions.AllowedSummaryLanguages.Contains(settings.Llm.SummaryLanguage, StringComparer.Ordinal))
         {
             errors.Add("Summary Language must be 'en', 'zh', or 'en+zh'.");
         }

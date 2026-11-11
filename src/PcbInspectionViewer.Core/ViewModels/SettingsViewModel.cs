@@ -63,9 +63,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     public event EventHandler<StationSettings>? SettingsSaved;
     public event EventHandler<BackendHealthStatus>? HealthChecked;
 
-    public IReadOnlyList<string> AvailableIpcClasses { get; } = ["Class 2", "Class 3"];
-    public IReadOnlyList<string> AvailableLlmProviders { get; } = ["None", "Gemini", "OpenAI"];
-    public IReadOnlyList<string> AvailableSummaryLanguages { get; } = ["en", "zh", "en+zh"];
+    public IReadOnlyList<string> AvailableIpcClasses => BatchOptions.AllowedIpcClasses;
+    public IReadOnlyList<string> AvailableLlmProviders => LlmOptions.AllowedProviders;
+    public IReadOnlyList<string> AvailableSummaryLanguages => LlmOptions.AllowedSummaryLanguages;
 
     public void ApplyFrom(StationSettings settings)
     {
@@ -109,7 +109,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private async Task SaveSettingsAsync(CancellationToken ct)
     {
         StationSettings candidate = BuildSettings();
-        SettingsValidationResult result = await _settingsService.SaveAsync(candidate, ct).ConfigureAwait(false);
+        SettingsValidationResult result = await _settingsService.SaveAsync(candidate, ct);
 
         HasValidationErrors = !result.IsValid;
         HasHttpsWarning = result.RequiresHttpsWarning;
@@ -130,7 +130,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task CheckHealthNowAsync(CancellationToken ct)
     {
-        BackendHealthStatus health = await _healthMonitor.CheckHealthAsync(BaseUrl.Trim(), ct).ConfigureAwait(false);
+        BackendHealthStatus health = await _healthMonitor.CheckHealthAsync(BaseUrl.Trim(), ct);
         HealthCheckResultText = health.IsOnline
             ? $"Online ({health.DetectorBackend} · v{health.Version})"
             : $"Offline ({health.ErrorMessage ?? "unreachable"})";

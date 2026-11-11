@@ -11,6 +11,7 @@ public sealed record ApiOptions
 public sealed record BatchOptions
 {
     public const string SectionName = "Batch";
+    public static IReadOnlyList<string> AllowedIpcClasses { get; } = ["Class 2", "Class 3"];
 
     public int Concurrency { get; init; } = 2;
     public string DefaultIpcClass { get; init; } = "Class 2";
@@ -21,6 +22,8 @@ public sealed record BatchOptions
 public sealed record LlmOptions
 {
     public const string SectionName = "Llm";
+    public static IReadOnlyList<string> AllowedProviders { get; } = ["None", "Gemini", "OpenAI"];
+    public static IReadOnlyList<string> AllowedSummaryLanguages { get; } = ["en", "zh", "en+zh"];
 
     public string Provider { get; init; } = "None";
     public string ModelName { get; init; } = "gemini-2.5-flash";

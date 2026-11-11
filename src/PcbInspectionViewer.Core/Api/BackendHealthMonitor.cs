@@ -47,7 +47,7 @@ public sealed class BackendHealthMonitor : IBackendHealthMonitor
         try
         {
             Uri baseUri = ResolveBaseUri(baseUrlOverride);
-            var healthUri = new Uri(baseUri, "/api/health");
+            var healthUri = new Uri(baseUri, "api/health");
 
             using HttpResponseMessage response = await _httpClient.GetAsync(healthUri, ct).ConfigureAwait(false);
             if (response.IsSuccessStatusCode)
@@ -87,7 +87,7 @@ public sealed class BackendHealthMonitor : IBackendHealthMonitor
 
     private async Task<BackendHealthStatus> FallbackToOpenApiJsonAsync(Uri baseUri, CancellationToken ct)
     {
-        var openApiUri = new Uri(baseUri, "/openapi.json");
+        var openApiUri = new Uri(baseUri, "openapi.json");
         using HttpResponseMessage response = await _httpClient.GetAsync(openApiUri, ct).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
@@ -117,18 +117,21 @@ public sealed class BackendHealthMonitor : IBackendHealthMonitor
     private Uri ResolveBaseUri(string? baseUrlOverride)
     {
         if (!string.IsNullOrWhiteSpace(baseUrlOverride) &&
-            Uri.TryCreate(baseUrlOverride.TrimEnd('/'), UriKind.Absolute, out Uri? customUri))
+            Uri.TryCreate(EnsureTrailingSlash(baseUrlOverride.Trim()), UriKind.Absolute, out Uri? customUri))
         {
             return customUri;
         }
 
         if (_httpClient.BaseAddress is not null)
         {
-            return _httpClient.BaseAddress;
+            return new Uri(EnsureTrailingSlash(_httpClient.BaseAddress.ToString()));
         }
 
-        return new Uri("http://localhost:8000");
+        return new Uri("http://localhost:8000/");
     }
+
+    private static string EnsureTrailingSlash(string url) =>
+        url.EndsWith('/') ? url : $"{url}/";
 
     private sealed class HealthEndpointDto
     {
