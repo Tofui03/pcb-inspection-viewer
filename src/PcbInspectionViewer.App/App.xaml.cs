@@ -88,11 +88,41 @@ public partial class App : Application
                 });
 
                 services.AddSingleton<IBatchInspectionRunner, BatchInspectionRunner>();
+                services.AddSingleton<PcbInspectionViewer.Core.Services.IDashboardService>(sp =>
+                {
+                    var settingsService = sp.GetRequiredService<ISettingsService>();
+                    string dbPath = settingsService.DatabaseFilePath;
+                    return new PcbInspectionViewer.Core.Services.DashboardService(() => new InspectionDbContext(dbPath));
+                });
+                services.AddSingleton<PcbInspectionViewer.Core.Export.IExportService, PcbInspectionViewer.Core.Export.ExportService>();
+
+                // LLM Provider resolution based on settings
+                services.AddSingleton<PcbInspectionViewer.Core.Llm.ILlmProvider>(sp =>
+                {
+                    var settingsService = sp.GetRequiredService<ISettingsService>();
+                    var settings = settingsService.LoadAsync().GetAwaiter().GetResult();
+                    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+                    var client = httpClientFactory.CreateClient();
+
+                    string? geminiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+                    string? openAiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+
+                    return settings.Llm.Provider switch
+                    {
+                        "Gemini" when !string.IsNullOrWhiteSpace(geminiKey) =>
+                            new PcbInspectionViewer.Core.Llm.GeminiLlmProvider(client, geminiKey, settings.Llm.ModelName),
+                        "OpenAI" when !string.IsNullOrWhiteSpace(openAiKey) =>
+                            new PcbInspectionViewer.Core.Llm.OpenAiLlmProvider(client, openAiKey, settings.Llm.ModelName),
+                        _ => new PcbInspectionViewer.Core.Llm.NullLlmProvider()
+                    };
+                });
+                services.AddSingleton<PcbInspectionViewer.Core.Llm.ISummaryCoordinator, PcbInspectionViewer.Core.Llm.SummaryCoordinator>();
 
                 services.AddSingleton<SettingsViewModel>();
                 services.AddSingleton<InspectViewModel>();
                 services.AddSingleton<BatchInspectViewModel>();
                 services.AddSingleton<HistoryViewModel>();
+                services.AddSingleton<DashboardViewModel>();
                 services.AddSingleton<MainShellViewModel>();
                 services.AddSingleton<MainWindow>();
             })

@@ -39,7 +39,8 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
         SettingsViewModel settingsViewModel,
         InspectViewModel? inspectViewModel = null,
         HistoryViewModel? historyViewModel = null,
-        BatchInspectViewModel? batchInspectViewModel = null)
+        BatchInspectViewModel? batchInspectViewModel = null,
+        DashboardViewModel? dashboardViewModel = null)
     {
         ArgumentNullException.ThrowIfNull(settingsService);
         ArgumentNullException.ThrowIfNull(healthMonitor);
@@ -51,6 +52,7 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
         Inspect = inspectViewModel;
         History = historyViewModel;
         Batch = batchInspectViewModel;
+        Dashboard = dashboardViewModel;
 
         DatabasePathText = _settingsService.DatabaseFilePath;
 
@@ -67,6 +69,7 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
     public InspectViewModel? Inspect { get; }
     public HistoryViewModel? History { get; }
     public BatchInspectViewModel? Batch { get; }
+    public DashboardViewModel? Dashboard { get; }
 
     private void OnHistoryDrillDownRequested(object? sender, Data.Entities.InspectionEntity entity)
     {
@@ -87,6 +90,13 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
     {
         SelectedTabIndex = 2;
         _ = History?.LoadHistoryAsync();
+    }
+
+    [RelayCommand]
+    private void OpenDashboardTab()
+    {
+        SelectedTabIndex = 3;
+        _ = Dashboard?.RefreshDashboardAsync();
     }
 
     [RelayCommand]

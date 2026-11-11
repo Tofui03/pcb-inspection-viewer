@@ -178,4 +178,56 @@ public partial class MainWindow : Window
 
         e.Handled = true;
     }
+
+    private async void OnExportHistoryCsvClicked(object sender, RoutedEventArgs e)
+    {
+        if (HistoryVm is null) return;
+
+        var dialog = new SaveFileDialog
+        {
+            Title = "Export Inspections to CSV",
+            Filter = "CSV files (*.csv)|*.csv",
+            FileName = $"pcb_inspections_{DateTime.Now:yyyyMMdd_HHmmss}.csv"
+        };
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            try
+            {
+                using var fs = File.Create(dialog.FileName);
+                await HistoryVm.ExportCurrentViewCsvAsync(fs);
+                MessageBox.Show(this, "Inspections CSV export completed successfully.", "Export", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"Export failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+
+    private async void OnExportHistoryPdfClicked(object sender, RoutedEventArgs e)
+    {
+        if (HistoryVm is null) return;
+
+        var dialog = new SaveFileDialog
+        {
+            Title = "Export Inspections Quality Report to PDF",
+            Filter = "PDF files (*.pdf)|*.pdf",
+            FileName = $"pcb_report_{DateTime.Now:yyyyMMdd_HHmmss}.pdf"
+        };
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            try
+            {
+                using var fs = File.Create(dialog.FileName);
+                await HistoryVm.ExportCurrentViewPdfAsync(fs);
+                MessageBox.Show(this, "Inspections PDF report export completed successfully.", "Export", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"Export failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
 }

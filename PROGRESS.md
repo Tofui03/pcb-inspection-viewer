@@ -130,22 +130,22 @@
 
 *Acceptance Criteria: KPIs match SQL hand-check; CSV opens in Excel with Chinese intact; PDF has KPIs, chart, table, labelled summary; with no key → template summary; with key → valid JSON summary whose numbers match facts; validator tests green.*
 
-- [ ] **Step 5.1 — Daily Dashboard (`F4`)**
-  - [ ] Implement `IDashboardService` aggregating by chosen local day: boards inspected, yield (`PASS / completed`, excluding errors), `REWORK` & `SCRAP` counts, top 3 defect classes (bar chart), hourly throughput (line chart), and halted batches.
-  - [ ] Build Dashboard UI view using `LiveCharts2` (or `OxyPlot`).
-- [ ] **Step 5.2 — CSV & PDF Export (`F5`)**
-  - [ ] CSV (`CsvHelper`): export per-inspection or per-defect with current filter applied, encoded as **UTF-8 with BOM** (Excel-compatible for English + 中文).
-  - [ ] PDF (`QuestPDF` Community licence): batch/day report with header, KPIs, chart image, table, and optional LLM summary explicitly marked `"AI-generated explanation; verdicts are rule-based"`.
-- [ ] **Step 5.3 — P1 LLM Inspection Summary (`§4.2`, Must)**
-  - [ ] Implement `ILlmProvider` (`GeminiProvider`, `OpenAiProvider`, `NullProvider`) with `Temperature = 0.2`, `Timeout = 30s`.
-  - [ ] Build aggregated facts input (counts by verdict, yield, counts by defect class, 3×3 board grid centroid distribution, top corrective actions, halted flags, IPC class, batch id, time range — **never raw images**).
-  - [ ] Implement `SummaryValidator`:
-    - [ ] Strip markdown code fences and strictly parse JSON against `InspectionSummary v1` schema.
-    - [ ] **Numeric consistency check:** every number in `headline` and `yield_statement` must match an input fact (within `±0.1` for percentages).
-    - [ ] **Verdict contradiction check:** reject claims like `"all boards passed"` when `SCRAP > 0` or `REWORK > 0`.
-  - [ ] Implement retry coordinator: up to 3 technical retries (timeout, 5xx, 429) with exponential backoff + up to 2 semantic re-prompts appending the validation error.
-  - [ ] Implement `TemplateSummaryProvider` deterministic fallback (EN & 中文 templates) when provider is `None`, offline, or retries are exhausted.
-  - [ ] Persist to `LlmSummary` table and show source badge in UI.
+- [x] **Step 5.1 — Daily Dashboard (`F4`)**
+  - [x] Implement `IDashboardService` aggregating by chosen local day: boards inspected, yield (`PASS / completed`, excluding errors), `REWORK` & `SCRAP` counts, top 3 defect classes (bar chart), hourly throughput (line chart), and halted batches.
+  - [x] Build Dashboard UI view using `LiveCharts2` (or `OxyPlot`).
+- [x] **Step 5.2 — CSV & PDF Export (`F5`)**
+  - [x] CSV (`CsvHelper`): export per-inspection or per-defect with current filter applied, encoded as **UTF-8 with BOM** (Excel-compatible for English + 中文).
+  - [x] PDF (`QuestPDF` Community licence): batch/day report with header, KPIs, chart image, table, and optional LLM summary explicitly marked `"AI-generated explanation; verdicts are rule-based"`.
+- [x] **Step 5.3 — P1 LLM Inspection Summary (`§4.2`, Must)**
+  - [x] Implement `ILlmProvider` (`GeminiProvider`, `OpenAiProvider`, `NullProvider`) with `Temperature = 0.2`, `Timeout = 30s`.
+  - [x] Build aggregated facts input (counts by verdict, yield, counts by defect class, 3×3 board grid centroid distribution, top corrective actions, halted flags, IPC class, batch id, time range — **never raw images**).
+  - [x] Implement `SummaryValidator`:
+    - [x] Strip markdown code fences and strictly parse JSON against `InspectionSummary v1` schema.
+    - [x] **Numeric consistency check:** every number in `headline` and `yield_statement` must match an input fact (within `±0.1` for percentages).
+    - [x] **Verdict contradiction check:** reject claims like `"all boards passed"` when `SCRAP > 0` or `REWORK > 0`.
+  - [x] Implement retry coordinator: up to 3 technical retries (timeout, 5xx, 429) with exponential backoff + up to 2 semantic re-prompts appending the validation error.
+  - [x] Implement `TemplateSummaryProvider` deterministic fallback (EN & 中文 templates) when provider is `None`, offline, or retries are exhausted.
+  - [x] Persist to `LlmSummary` table and show source badge in UI.
 
 ---
 

@@ -62,11 +62,73 @@ public sealed partial class HistoryViewModel : ObservableObject
     public ObservableCollection<string> SelectedDefectClasses { get; } = new();
 
     public event EventHandler<InspectionEntity>? DrillDownRequested;
+    private readonly Export.IExportService? _exportService;
 
-    public HistoryViewModel(IInspectionRepository repository, IImageCache imageCache)
+    public HistoryViewModel(
+        IInspectionRepository repository,
+        IImageCache imageCache,
+        Export.IExportService? exportService = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _imageCache = imageCache ?? throw new ArgumentNullException(nameof(imageCache));
+        _exportService = exportService;
+    }
+
+    [RelayCommand]
+    public async Task ExportCurrentViewCsvAsync(Stream destinationStream, CancellationToken ct = default)
+    {
+        if (_exportService is null) return;
+        var filter = BuildCurrentFilter();
+        List<InspectionEntity> inspections = await _repository.QueryInspectionsAsync(filter, ct);
+        await _exportService.ExportInspectionsCsvAsync(inspections, destinationStream, ct);
+        StatusMessage = $"Exported {inspections.Count} records to CSV.";
+    }
+
+    [RelayCommand]
+    public async Task ExportCurrentViewPdfAsync(Stream destinationStream, CancellationToken ct = default)
+    {
+        if (_exportService is null) return;
+        var filter = BuildCurrentFilter();
+        List<InspectionEntity> inspections = await _repository.QueryInspectionsAsync(filter, ct);
+        
+        int total = inspections.Count;
+        int pass = inspections.Count(i => i.BoardDisposition == "PASS");
+        int rework = inspections.Count(i => i.BoardDisposition == "REWORK");
+        int scrap = inspections.Count(i => i.BoardDisposition == "SCRAP");
+        double yieldPct = total > 0 ? (double)pass / total * 100.0 : 0.0;
+        bool halted = inspections.Any(i => i.LineHalted);
+
+        var reportData = new Export.PdfReportData(
+            ReportTitle: "PCB Inspection History Report",
+            BatchOrDateScope: $"Batch: {SelectedBatch} | Verdict: {SelectedVerdict}",
+            GeneratedAtLocal: DateTime.Now,
+            TotalInspected: total,
+            PassCount: pass,
+            ReworkCount: rework,
+            ScrapCount: scrap,
+            YieldPercentage: Math.Round(yieldPct, 2),
+            LineHalted: halted,
+            Inspections: inspections,
+            TopDefects: Array.Empty<Services.DefectClassDistribution>(),
+            LlmSummaryHeadline: null,
+            LlmSummaryBody: null,
+            IsAiGenerated: false
+        );
+
+        await _exportService.GeneratePdfReportAsync(reportData, destinationStream, ct);
+        StatusMessage = $"Exported PDF report for {total} boards.";
+    }
+
+    private InspectionQueryFilter BuildCurrentFilter()
+    {
+        return new InspectionQueryFilter(
+            Verdict: SelectedVerdict,
+            BatchId: SelectedBatch,
+            FileNameSubstring: FileNameSearch,
+            StartDateUtc: StartDate?.ToUniversalTime(),
+            EndDateUtc: EndDate?.ToUniversalTime(),
+            DefectClasses: SelectedDefectClasses.ToList(),
+            Limit: 1000);
     }
 
     [RelayCommand]

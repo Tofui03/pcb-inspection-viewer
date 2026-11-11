@@ -692,6 +692,23 @@
 
                             <Button Content="Clear Filters"
                                     Command="{Binding ClearFiltersCommand}"
+                                    Padding="10,5"
+                                    Margin="0,0,16,0" />
+
+                            <!-- Export buttons (F5) -->
+                            <Button Content="Export CSV"
+                                    Click="OnExportHistoryCsvClicked"
+                                    Background="#059669"
+                                    Foreground="White"
+                                    FontWeight="SemiBold"
+                                    Padding="10,5"
+                                    Margin="0,0,8,0" />
+
+                            <Button Content="Export PDF"
+                                    Click="OnExportHistoryPdfClicked"
+                                    Background="#D97706"
+                                    Foreground="White"
+                                    FontWeight="SemiBold"
                                     Padding="10,5" />
                         </WrapPanel>
                     </Border>
@@ -762,12 +779,127 @@
             </TabItem>
 
             <!-- Screen 3: Dashboard (F4) -->
-            <TabItem Header="3. Dashboard">
-                <Grid Margin="24">
-                    <TextBlock Text="Daily Yield &amp; Throughput Dashboard (Ready for Milestone D11–12)"
-                               FontSize="16"
-                               FontWeight="SemiBold"
-                               Foreground="#334155" />
+            <TabItem Header="3. Dashboard (F4)">
+                <Grid Margin="16" DataContext="{Binding Dashboard}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Top Bar: Date selection and Refresh -->
+                    <Border Grid.Row="0" Background="#F1F5F9" CornerRadius="6" Padding="12" Margin="0,0,0,12">
+                        <DockPanel LastChildFill="False">
+                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                                <TextBlock Text="Target Day:" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#0F172A" />
+                                <DatePicker SelectedDate="{Binding SelectedDate, Mode=TwoWay}" Width="140" VerticalAlignment="Center" Margin="0,0,12,0" />
+                                <Button Content="Refresh Metrics" Command="{Binding RefreshDashboardCommand}" Padding="12,6" Background="#0284C7" Foreground="White" BorderThickness="0" Cursor="Hand" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding StatusMessage}" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="#64748B" FontStyle="Italic" />
+                        </DockPanel>
+                    </Border>
+
+                    <!-- KPI Cards Row -->
+                    <UniformGrid Grid.Row="1" Columns="5" Margin="0,0,0,16">
+                        <Border Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Text="BOARDS INSPECTED" FontSize="11" FontWeight="Bold" Foreground="#64748B" />
+                                <TextBlock Text="{Binding TotalInspected}" FontSize="24" FontWeight="Bold" Foreground="#0F172A" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Border>
+                        <Border Background="White" BorderBrush="#BBF7D0" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Text="PASS COUNT" FontSize="11" FontWeight="Bold" Foreground="#15803D" />
+                                <TextBlock Text="{Binding PassCount}" FontSize="24" FontWeight="Bold" Foreground="#16A34A" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Border>
+                        <Border Background="White" BorderBrush="#FEF08A" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Text="REWORK REQUIRED" FontSize="11" FontWeight="Bold" Foreground="#B45309" />
+                                <TextBlock Text="{Binding ReworkCount}" FontSize="24" FontWeight="Bold" Foreground="#D97706" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Border>
+                        <Border Background="White" BorderBrush="#FECACA" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Text="SCRAP" FontSize="11" FontWeight="Bold" Foreground="#B91C1C" />
+                                <TextBlock Text="{Binding ScrapCount}" FontSize="24" FontWeight="Bold" Foreground="#DC2626" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Border>
+                        <Border Background="White" BorderBrush="#BAE6FD" BorderThickness="1" CornerRadius="8" Padding="14">
+                            <StackPanel>
+                                <TextBlock Text="OVERALL YIELD" FontSize="11" FontWeight="Bold" Foreground="#0369A1" />
+                                <TextBlock Text="{Binding YieldPercentage, StringFormat={}{0:F1}%}" FontSize="24" FontWeight="Bold" Foreground="#0284C7" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+
+                    <!-- Main Panels: Top Defects & Hourly Throughput -->
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="380" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Left: Top Defect Classes & Halted Line Status -->
+                        <Border Grid.Column="0" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,12,0">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel>
+                                    <TextBlock Text="Top Defect Distribution" FontSize="15" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,0,12" />
+                                    <ItemsControl ItemsSource="{Binding TopDefectClasses}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border BorderBrush="#F1F5F9" BorderThickness="0,0,0,1" Padding="0,6,0,6">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Grid.Column="0">
+                                                            <TextBlock Text="{Binding DefectClass}" FontWeight="SemiBold" Foreground="#334155" />
+                                                            <TextBlock Text="{Binding Count, StringFormat={}{0} occurrences}" FontSize="11" Foreground="#64748B" />
+                                                        </StackPanel>
+                                                        <TextBlock Grid.Column="1" Text="{Binding Percentage, StringFormat={}{0:F1}%}" FontWeight="Bold" Foreground="#0284C7" VerticalAlignment="Center" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <Separator Margin="0,16,0,16" Background="#E2E8F0" />
+                                    <TextBlock Text="Quality Guardrail Status" FontSize="15" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,0,8" />
+                                    <TextBlock Text="Halted Batches Count:" FontSize="12" Foreground="#64748B" />
+                                    <TextBlock Text="{Binding HaltedBatchesCount}" FontSize="18" FontWeight="Bold" Foreground="#DC2626" Margin="0,2,0,8" />
+                                    <TextBlock Text="Halted Batch IDs:" FontSize="12" Foreground="#64748B" />
+                                    <TextBlock Text="{Binding HaltedBatchesSummary}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="#334155" />
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Border>
+
+                        <!-- Right: Hourly Throughput Table -->
+                        <Border Grid.Column="1" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="8" Padding="16">
+                            <DockPanel>
+                                <TextBlock Text="Hourly Throughput (24 Hours)" FontSize="15" FontWeight="Bold" Foreground="#0F172A" DockPanel.Dock="Top" Margin="0,0,0,12" />
+                                <DataGrid ItemsSource="{Binding HourlyThroughput}"
+                                          AutoGenerateColumns="False"
+                                          IsReadOnly="True"
+                                          CanUserAddRows="False"
+                                          CanUserDeleteRows="False"
+                                          GridLinesVisibility="Horizontal"
+                                          HorizontalGridLinesBrush="#F1F5F9"
+                                          BorderThickness="0"
+                                          RowHeight="26"
+                                          Background="Transparent">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Hour" Binding="{Binding HourLabel}" Width="100" />
+                                        <DataGridTextColumn Header="Inspected" Binding="{Binding InspectedCount}" Width="110" />
+                                        <DataGridTextColumn Header="Pass" Binding="{Binding PassCount}" Width="110" />
+                                        <DataGridTextColumn Header="Rework" Binding="{Binding ReworkCount}" Width="110" />
+                                        <DataGridTextColumn Header="Scrap" Binding="{Binding ScrapCount}" Width="110" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
                 </Grid>
             </TabItem>
 
