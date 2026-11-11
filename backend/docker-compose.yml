@@ -1,0 +1,20 @@
+services:
+  deeppcb-aoi:
+    build:
+      context: https://github.com/Tofui03/DeepPCB-AOI.git#main
+    container_name: deeppcb-aoi-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DETECTOR_BACKEND=yolov8
+    # Optional: mount the full DeepPCB dataset for demo-sample mode (§8.2).
+    # Without this volume, the backend starts cleanly using its bundled mock fixture (BC-5).
+    # volumes:
+    #   - ./data/DeepPCB:/app/data/DeepPCB:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped

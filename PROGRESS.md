@@ -59,24 +59,24 @@
 
 *Acceptance Criteria: `docker compose up` serves the API; `curl /api/health` returns 200; WPF app launches, Settings saved; status pill green/red works; CI build passes on `windows-latest`.*
 
-- [ ] **Step 2.1 — Repository & Solution Setup**
-  - [ ] Initialize `pcb-inspection-viewer` repo with `.gitignore` (covering `appsettings.*.local.json`, `*.db`, `cache/`, `logs/`, `bin/`, `obj/`).
-  - [ ] Create `Directory.Build.props` (`Nullable=enable`, `TreatWarningsAsErrors=true`, `LangVersion=latest`).
-  - [ ] Create `PcbInspectionViewer.sln`:
-    - [ ] `src/PcbInspectionViewer.Core` (`net8.0`, no WPF references)
-    - [ ] `src/PcbInspectionViewer.App` (`net8.0-windows`, WPF)
-    - [ ] `tests/PcbInspectionViewer.Core.Tests` (`net8.0`, xUnit + FluentAssertions + NSubstitute)
-    - [ ] `tests/PcbInspectionViewer.App.Tests` (`net8.0-windows`, xUnit)
-    - [ ] `tests/PcbInspectionViewer.IntegrationTests` (`net8.0`, xUnit)
-- [ ] **Step 2.2 — Docker Compose (`backend/`)**
-  - [ ] Add `backend/docker-compose.yml` mapping `8000:8000`, `DETECTOR_BACKEND=yolov8`, optional volume `./data/DeepPCB:/app/data/DeepPCB:ro`, `restart: unless-stopped`.
-- [ ] **Step 2.3 — DI, Logging & Settings (`F7`)**
-  - [ ] Configure `Microsoft.Extensions.Hosting` in `App.xaml.cs`.
-  - [ ] Configure `Serilog` rolling daily file sink in `%LOCALAPPDATA%\PcbInspectionViewer\logs` (never log API keys or full prompts at `Information` level).
-  - [ ] Implement Options classes (`ApiOptions`, `LlmOptions`, `BatchOptions`) + Settings UI screen (`F7`).
-  - [ ] Implement 30s background health check polling + bottom status bar pill (`Backend online` green / `Backend offline` red + detector/API version).
-- [ ] **Step 2.4 — Initial CI Workflow**
-  - [ ] Add `.github/workflows/build-test.yml` (`windows-latest`, `dotnet build -warnaserror`, `dotnet test`) and `.github/workflows/gitleaks.yml`.
+- [x] **Step 2.1 — Repository & Solution Setup**
+  - [x] Initialize `pcb-inspection-viewer` repo with `.gitignore` (covering `appsettings.*.local.json`, `*.db`, `cache/`, `logs/`, `bin/`, `obj/`).
+  - [x] Create `Directory.Build.props` (`Nullable=enable`, `TreatWarningsAsErrors=true`, `LangVersion=latest`).
+  - [x] Create `PcbInspectionViewer.sln`:
+    - [x] `src/PcbInspectionViewer.Core` (`net8.0`, no WPF references)
+    - [x] `src/PcbInspectionViewer.App` (`net8.0-windows`, WPF)
+    - [x] `tests/PcbInspectionViewer.Core.Tests` (`net8.0`, xUnit + FluentAssertions + NSubstitute)
+    - [x] `tests/PcbInspectionViewer.App.Tests` (`net8.0`, xUnit)
+    - [x] `tests/PcbInspectionViewer.IntegrationTests` (`net8.0`, xUnit)
+- [x] **Step 2.2 — Docker Compose (`backend/`)**
+  - [x] Add `backend/docker-compose.yml` mapping `8000:8000`, `DETECTOR_BACKEND=yolov8`, optional volume `./data/DeepPCB:/app/data/DeepPCB:ro`, `restart: unless-stopped`.
+- [x] **Step 2.3 — DI, Logging & Settings (`F7`)**
+  - [x] Configure `Microsoft.Extensions.Hosting` in `App.xaml.cs`.
+  - [x] Configure `Serilog` rolling daily file sink in `%LOCALAPPDATA%\PcbInspectionViewer\logs` (never log API keys or full prompts at `Information` level).
+  - [x] Implement Options classes (`ApiOptions`, `LlmOptions`, `BatchOptions`) + Settings UI screen (`F7`).
+  - [x] Implement 30s background health check polling + bottom status bar pill (`Backend online` green / `Backend offline` red + detector/API version).
+- [x] **Step 2.4 — Initial CI Workflow**
+  - [x] Add `.github/workflows/build-test.yml` (`windows-latest`, `dotnet build -warnaserror`, `dotnet test`) and `.github/workflows/gitleaks.yml`.
 
 ---
 

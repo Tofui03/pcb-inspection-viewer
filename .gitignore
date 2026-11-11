@@ -1,0 +1,39 @@
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# .NET Test & Coverage
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# PCB Inspection Viewer local secrets, DB, cache & logs (§6.6)
+appsettings.*.local.json
+settings.local.json
+*.db
+*.db-shm
+*.db-wal
+cache/
+logs/
