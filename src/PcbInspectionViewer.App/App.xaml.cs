@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using PcbInspectionViewer.Core.Api;
+using PcbInspectionViewer.Core.Batch;
 using PcbInspectionViewer.Core.Configuration;
 using PcbInspectionViewer.Core.Data;
 using PcbInspectionViewer.Core.Storage;
@@ -86,8 +87,11 @@ public partial class App : Application
                     client.Timeout = TimeSpan.FromSeconds(30);
                 });
 
+                services.AddSingleton<IBatchInspectionRunner, BatchInspectionRunner>();
+
                 services.AddSingleton<SettingsViewModel>();
                 services.AddSingleton<InspectViewModel>();
+                services.AddSingleton<BatchInspectViewModel>();
                 services.AddSingleton<HistoryViewModel>();
                 services.AddSingleton<MainShellViewModel>();
                 services.AddSingleton<MainWindow>();

@@ -19,7 +19,46 @@ public partial class MainWindow : Window
     }
 
     private InspectViewModel? InspectVm => (DataContext as MainShellViewModel)?.Inspect;
+    private BatchInspectViewModel? BatchVm => (DataContext as MainShellViewModel)?.Batch;
     private HistoryViewModel? HistoryVm => (DataContext as MainShellViewModel)?.History;
+
+    private void OnBrowseBatchFolderClick(object sender, RoutedEventArgs e)
+    {
+        if (BatchVm is null)
+        {
+            return;
+        }
+
+        var dialog = new OpenFolderDialog
+        {
+            Title = "Select Folder Containing PCB Board Images"
+        };
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            BatchVm.FolderPath = dialog.FolderName;
+        }
+    }
+
+    private void OnBrowseBatchTemplateClick(object sender, RoutedEventArgs e)
+    {
+        if (BatchVm is null)
+        {
+            return;
+        }
+
+        var dialog = new OpenFileDialog
+        {
+            Title = "Select Global Golden Template PCB Image",
+            Filter = ImageDialogFilter,
+            CheckFileExists = true
+        };
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            BatchVm.GlobalTemplatePath = dialog.FileName;
+        }
+    }
 
     private void OnHistoryDataGridMouseDoubleClick(object sender, MouseButtonEventArgs e)
     {

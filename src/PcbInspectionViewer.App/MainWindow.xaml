@@ -13,6 +13,7 @@
     <Window.InputBindings>
         <KeyBinding Key="F5" Command="{Binding Inspect.InspectCommand}" />
         <KeyBinding Key="Escape" Command="{Binding Inspect.CancelInspectCommand}" />
+        <KeyBinding Key="F2" Command="{Binding OpenBatchTabCommand}" />
         <KeyBinding Key="F3" Command="{Binding OpenHistoryTabCommand}" />
         <KeyBinding Key="F7" Command="{Binding OpenSettingsTabCommand}" />
     </Window.InputBindings>
@@ -28,8 +29,8 @@
                     Margin="12,12,12,8"
                     Background="White"
                     BorderBrush="#CBD5E1">
-            <!-- Screen 1: Inspect (F1 / F2) -->
-            <TabItem Header="1. Inspect">
+            <!-- Screen 1: Single Inspect (F1) -->
+            <TabItem Header="1. Single Inspect (F1)">
                 <Grid Margin="16" DataContext="{Binding Inspect}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="320" />
@@ -431,8 +432,189 @@
                 </Grid>
             </TabItem>
 
-            <!-- Screen 2: History (F3) -->
-            <TabItem Header="2. History">
+            <!-- Screen 2: Batch Inspect (F2) -->
+            <TabItem Header="2. Batch Inspect (F2)">
+                <Grid Margin="16" DataContext="{Binding Batch}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Top Config & Action Bar -->
+                    <Border Grid.Row="0"
+                            Background="#F8FAFC"
+                            BorderBrush="#CBD5E1"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16"
+                            Margin="0,0,0,12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*" />
+                                <ColumnDefinition Width="2*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Folder Selection -->
+                            <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                <TextBlock Text="Target Boards Folder" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,4" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" Text="{Binding FolderPath, UpdateSourceTrigger=PropertyChanged}" Padding="6,5" />
+                                    <Button Grid.Column="1" Content="Browse..." Click="OnBrowseBatchFolderClick" Padding="10,5" Margin="6,0,0,0" />
+                                </Grid>
+                                <CheckBox Content="DeepPCB auto-pairing (&lt;id&gt;_test ↔ &lt;id&gt;_temp)"
+                                          IsChecked="{Binding UseDeepPcbAutoPairing}"
+                                          FontWeight="SemiBold"
+                                          Margin="0,6,0,0" />
+                            </StackPanel>
+
+                            <!-- Global Template (Disabled if DeepPCB auto-pairing) -->
+                            <StackPanel Grid.Column="1" Margin="0,0,12,0" IsEnabled="{Binding UseDeepPcbAutoPairing, Converter={StaticResource InverseBooleanConverter}}">
+                                <TextBlock Text="Global Golden Template (Single-template mode)" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,4" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" Text="{Binding GlobalTemplatePath, UpdateSourceTrigger=PropertyChanged}" Padding="6,5" />
+                                    <Button Grid.Column="1" Content="Browse..." Click="OnBrowseBatchTemplateClick" Padding="10,5" Margin="6,0,0,0" />
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- Options -->
+                            <StackPanel Grid.Column="2" Margin="0,0,12,0">
+                                <TextBlock Text="Batch ID / IPC / Concurrency" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,4" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="80" />
+                                        <ColumnDefinition Width="40" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" Text="{Binding BatchId, UpdateSourceTrigger=PropertyChanged}" Padding="6,5" Margin="0,0,4,0" ToolTip="Batch Identifier" />
+                                    <ComboBox Grid.Column="1" ItemsSource="{Binding AllowedIpcClasses}" SelectedItem="{Binding IpcClass}" Padding="4,4" Margin="0,0,4,0" ToolTip="IPC-A-600 Class" />
+                                    <TextBox Grid.Column="2" Text="{Binding Concurrency, UpdateSourceTrigger=PropertyChanged}" Padding="6,5" ToolTip="Concurrency (1–8)" />
+                                </Grid>
+                                <CheckBox Content="Colorize PCB visuals" IsChecked="{Binding ColorizePcb}" Margin="0,6,0,0" />
+                            </StackPanel>
+
+                            <!-- Actions -->
+                            <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                <Button Content="Start Batch (F2)"
+                                        Command="{Binding StartBatchCommand}"
+                                        Background="#2563EB"
+                                        Foreground="White"
+                                        FontWeight="Bold"
+                                        Padding="16,8"
+                                        Margin="0,0,0,6" />
+                                <Button Content="Cancel Batch"
+                                        Command="{Binding CancelBatchCommand}"
+                                        Padding="16,6" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Progress & KPI Metrics Card -->
+                    <Border Grid.Row="1"
+                            Background="White"
+                            BorderBrush="#E2E8F0"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="16,12"
+                            Margin="0,0,0,12">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding StatusMessage}" FontWeight="SemiBold" Foreground="#0F172A" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="Progress: " FontWeight="SemiBold" Foreground="#64748B" />
+                                    <TextBlock Text="{Binding CompletedCount}" FontWeight="Bold" Foreground="#10B981" />
+                                    <TextBlock Text=" passed/done, " Foreground="#64748B" />
+                                    <TextBlock Text="{Binding FailedCount}" FontWeight="Bold" Foreground="#EF4444" />
+                                    <TextBlock Text=" failed / " Foreground="#64748B" />
+                                    <TextBlock Text="{Binding TotalItems}" FontWeight="Bold" Foreground="#0F172A" />
+                                    <TextBlock Text=" total · Elapsed: " Foreground="#64748B" Margin="8,0,0,0" />
+                                    <TextBlock Text="{Binding ElapsedText}" FontWeight="Bold" Foreground="#0F172A" />
+                                    <TextBlock Text=" · ETA: " Foreground="#64748B" Margin="4,0,0,0" />
+                                    <TextBlock Text="{Binding EtaText}" FontWeight="Bold" Foreground="#0F172A" />
+                                </StackPanel>
+                            </Grid>
+
+                            <ProgressBar Grid.Row="1" Value="{Binding PercentComplete}" Height="8" Minimum="0" Maximum="100" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Batch Items Virtualized Live DataGrid -->
+                    <Border Grid.Row="2"
+                            BorderBrush="#CBD5E1"
+                            BorderThickness="1"
+                            CornerRadius="6">
+                        <DataGrid ItemsSource="{Binding Items}"
+                                  AutoGenerateColumns="False"
+                                  IsReadOnly="True"
+                                  CanUserSortColumns="True"
+                                  EnableRowVirtualization="True"
+                                  VirtualizingPanel.IsVirtualizing="True"
+                                  VirtualizingPanel.VirtualizationMode="Recycling"
+                                  GridLinesVisibility="Horizontal"
+                                  HorizontalGridLinesBrush="#E2E8F0"
+                                  RowHeight="32"
+                                  Background="White"
+                                  BorderThickness="0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="50" />
+                                <DataGridTextColumn Header="File Name" Binding="{Binding FileName}" Width="240" />
+                                <DataGridTemplateColumn Header="Status" Width="120">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{Binding Status, Converter={StaticResource BatchStatusToBrushConverter}}"
+                                                    CornerRadius="4"
+                                                    Padding="6,2"
+                                                    HorizontalAlignment="Left"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Status}" Foreground="White" FontWeight="Bold" FontSize="11" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Verdict" Width="100">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{Binding Verdict, Converter={StaticResource VerdictToBrushConverter}}"
+                                                    CornerRadius="4"
+                                                    Padding="6,2"
+                                                    HorizontalAlignment="Left"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{Binding Verdict, Converter={StaticResource NullOrEmptyToVisibilityConverter}}">
+                                                <TextBlock Text="{Binding Verdict}" Foreground="White" FontWeight="Bold" FontSize="11" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="# Defects" Binding="{Binding DefectCount}" Width="80" />
+                                <DataGridTextColumn Header="Stage-1 Latency" Binding="{Binding Stage1LatencyMs, StringFormat={}{0:F1} ms}" Width="120" />
+                                <DataGridTextColumn Header="Notes / Errors" Binding="{Binding ErrorMessage}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- Screen 3: History (F3) -->
+            <TabItem Header="3. History (F3)">
                 <Grid Margin="16" DataContext="{Binding History}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />

@@ -38,7 +38,8 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
         IBackendHealthMonitor healthMonitor,
         SettingsViewModel settingsViewModel,
         InspectViewModel? inspectViewModel = null,
-        HistoryViewModel? historyViewModel = null)
+        HistoryViewModel? historyViewModel = null,
+        BatchInspectViewModel? batchInspectViewModel = null)
     {
         ArgumentNullException.ThrowIfNull(settingsService);
         ArgumentNullException.ThrowIfNull(healthMonitor);
@@ -49,6 +50,7 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
         Settings = settingsViewModel;
         Inspect = inspectViewModel;
         History = historyViewModel;
+        Batch = batchInspectViewModel;
 
         DatabasePathText = _settingsService.DatabaseFilePath;
 
@@ -64,6 +66,7 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
     public SettingsViewModel Settings { get; }
     public InspectViewModel? Inspect { get; }
     public HistoryViewModel? History { get; }
+    public BatchInspectViewModel? Batch { get; }
 
     private void OnHistoryDrillDownRequested(object? sender, Data.Entities.InspectionEntity entity)
     {
@@ -77,20 +80,24 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private void OpenBatchTab() => SelectedTabIndex = 1;
+
+    [RelayCommand]
     private void OpenHistoryTab()
     {
-        SelectedTabIndex = 1;
+        SelectedTabIndex = 2;
         _ = History?.LoadHistoryAsync();
     }
 
     [RelayCommand]
-    private void OpenSettingsTab() => SelectedTabIndex = 4;
+    private void OpenSettingsTab() => SelectedTabIndex = 5;
 
     public async Task InitializeAsync(CancellationToken ct = default)
     {
         StationSettings loaded = await _settingsService.LoadAsync(ct);
         Settings.ApplyFrom(loaded);
         Inspect?.ApplySettingsDefaults(loaded);
+        Batch?.ApplySettingsDefaults(loaded);
         UpdateLlmStatusText(loaded.Llm);
 
         await RefreshHealthAsync(ct);
@@ -132,6 +139,7 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
     private void OnSettingsSaved(object? sender, StationSettings updated)
     {
         Inspect?.ApplySettingsDefaults(updated);
+        Batch?.ApplySettingsDefaults(updated);
         UpdateLlmStatusText(updated.Llm);
         _ = RefreshHealthAsync();
     }

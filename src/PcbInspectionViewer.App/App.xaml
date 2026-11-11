@@ -6,6 +6,9 @@
         <converters:OnlineToStatusBrushConverter x:Key="OnlineToStatusBrushConverter" />
         <converters:VerdictToBrushConverter x:Key="VerdictToBrushConverter" />
         <converters:VerdictToDisplayLabelConverter x:Key="VerdictToDisplayLabelConverter" />
+        <converters:BatchStatusToBrushConverter x:Key="BatchStatusToBrushConverter" />
+        <converters:InverseBooleanConverter x:Key="InverseBooleanConverter" />
+        <converters:NullOrEmptyToVisibilityConverter x:Key="NullOrEmptyToVisibilityConverter" />
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </Application.Resources>
 </Application>

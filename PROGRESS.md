@@ -114,11 +114,11 @@
 - [x] **Step 4.2 — Local Image Cache (`§6.4`)**
   - [x] Implement `IImageCache`: decode returned `test_b64` and `diff_b64` PNG data URIs and save to `%LOCALAPPDATA%\PcbInspectionViewer\cache\<sha256>.png`.
   - [x] Add `"Open data folder"` menu item.
-- [ ] **Step 4.3 — Bounded-Concurrency Batch Runner (`F2`)**
-  - [ ] Implement `IBatchRunner` using `SemaphoreSlim` / `Parallel.ForEachAsync` (default concurrency 2, configurable 1–8).
-  - [ ] Folder scanner: skip template file and `*_temp.*` files; support optional DeepPCB auto-pairing mode (`<id>_test.jpg` ↔ `<id>_temp.jpg`).
-  - [ ] Report progress (`n / N`, ETA, per-item status) via `IProgress<BatchProgress>` at least every 250 ms.
-  - [ ] Graceful per-item error capture (undecodable file, timeout, 4xx/5xx) without aborting the batch; `Cancel` finishes in-flight requests and marks remaining as `Cancelled`.
+- [x] **Step 4.3 — Bounded-Concurrency Batch Runner (`F2`)**
+  - [x] Implement `IBatchRunner` using `SemaphoreSlim` / `Parallel.ForEachAsync` (default concurrency 2, configurable 1–8).
+  - [x] Folder scanner: skip template file and `*_temp.*` files; support optional DeepPCB auto-pairing mode (`<id>_test.jpg` ↔ `<id>_temp.jpg`).
+  - [x] Report progress (`n / N`, ETA, per-item status) via `IProgress<BatchProgress>` at least every 250 ms.
+  - [x] Graceful per-item error capture (undecodable file, timeout, 4xx/5xx) without aborting the batch; `Cancel` finishes in-flight requests and marks remaining as `Cancelled`.
 - [x] **Step 4.4 — History Table & Drill-Down (`F3`)**
   - [x] Virtualized `DataGrid` (smooth scrolling at ≥10k rows): time (local), file name, batch, verdict, #defects, classes, latency.
   - [x] Filters: verdict, defect class (multi-select), batch, date range, filename search.
