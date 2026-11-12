@@ -29,7 +29,7 @@ public sealed class InspectionDbContext : DbContext
     {
         if (!optionsBuilder.IsConfigured && !string.IsNullOrWhiteSpace(_dbPath))
         {
-            optionsBuilder.UseSqlite($"Data Source={_dbPath};Cache=Shared;Busy Timeout=5000");
+            optionsBuilder.UseSqlite($"Data Source={_dbPath};Cache=Shared;Default Timeout=5");
         }
     }
 
