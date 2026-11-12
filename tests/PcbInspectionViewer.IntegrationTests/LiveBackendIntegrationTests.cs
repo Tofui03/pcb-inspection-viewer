@@ -49,11 +49,16 @@ public sealed class LiveBackendIntegrationTests
             using var apiClient = new HttpClient { BaseAddress = new Uri(_backendBaseUrl), Timeout = TimeSpan.FromSeconds(30) };
             var inspectionClient = new InspectionApiClient(apiClient);
 
+            byte[] tempBytes = await File.ReadAllBytesAsync(templatePath);
+            byte[] testBytes = await File.ReadAllBytesAsync(testPath);
+
             var request = new UploadTriageRequest(
-                TemplateImagePath: templatePath,
-                TestImagePath: testPath,
-                IpcClass: "Class 2",
+                TemplateBytes: tempBytes,
+                TemplateFileName: Path.GetFileName(templatePath),
+                TestBytes: testBytes,
+                TestFileName: Path.GetFileName(testPath),
                 BatchId: "INTEG-BATCH-01",
+                IpcClass: "Class 2",
                 ColorizePcb: false);
 
             UploadTriageEnvelope envelope = await inspectionClient.UploadTriageAsync(request);
