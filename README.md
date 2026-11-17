@@ -2,6 +2,8 @@
 
 C# .NET 8 WPF modern operator station client for the [DeepPCB-AOI](https://github.com/Tofui03/DeepPCB-AOI) bare-board defect inspection system.
 
+![PCB Inspection Viewer — Inspect tab](docs/viewer-inspect.png)
+
 ![PCB Inspection Viewer](docs/inspect-loop.gif)
 
 ## Key Features

@@ -23,17 +23,26 @@ jobs:
         run: |
           docker build -t deeppcb-aoi:latest backend-src
           docker run -d --name pcb-api -p 8000:8000 deeppcb-aoi:latest
-          
-          # Wait for /api/health to return 200 OK
-          echo "Waiting for backend health check..."
+
+          # DeepPCB-AOI GET /api/health returns {"status": "ok", ...}, not "online".
+          echo "Waiting for /api/health status ok..."
+          healthy=0
           for i in {1..30}; do
-            if curl -s http://localhost:8000/api/health | grep -q '"status":"online"'; then
+            body="$(curl -sf http://localhost:8000/api/health || true)"
+            echo "Health attempt ${i}/30: ${body}"
+            if printf '%s' "$body" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"'; then
               echo "Backend is healthy!"
+              healthy=1
               break
             fi
-            echo "Waiting ($i/30)..."
             sleep 2
           done
+
+          if [ "$healthy" -ne 1 ]; then
+            echo "Timed out waiting for DeepPCB-AOI /api/health to return status ok."
+            docker logs pcb-api || true
+            exit 1
+          fi
 
       - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
