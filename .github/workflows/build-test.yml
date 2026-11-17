@@ -2,9 +2,10 @@ name: Build and Unit Tests (Windows)
 
 on:
   push:
-    branches: [main]
+    branches: [main, "cursor/**"]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   build-and-test:

@@ -1,0 +1,35 @@
+name: Capture WPF Inspect UI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "cursor/**"
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+
+jobs:
+  capture-inspect-window:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build, launch, and screen-capture the Inspect window
+        shell: pwsh
+        run: ./scripts/capture-viewer-ui.ps1 -RepoRoot "${{ github.workspace }}" -OutDir "${{ github.workspace }}/artifacts/ui-capture"
+
+      - name: Upload screen captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: viewer-ui-capture
+          path: artifacts/ui-capture
+          if-no-files-found: warn

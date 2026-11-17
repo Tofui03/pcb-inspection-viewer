@@ -146,6 +146,7 @@ public partial class App : Application
         mainWindow.Show();
 
         await shellVm.InitializeAsync();
+        await CaptureFixtureHost.ApplyIfRequestedAsync(mainWindow, shellVm, e.Args);
         shellVm.StartPeriodicHealthPolling(TimeSpan.FromSeconds(30));
     }
 

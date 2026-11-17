@@ -382,6 +382,26 @@ public sealed partial class InspectViewModel : ObservableObject, IDisposable
         StatusOrErrorMessage = $"Loaded offline result for {entity.FileName} (#{entity.Id}) from local database.";
     }
 
+    public void ShowRecordedResult(UploadTriageEnvelope envelope, string? batchId = null, string? ipcClass = null)
+    {
+        ArgumentNullException.ThrowIfNull(envelope);
+
+        if (!string.IsNullOrWhiteSpace(batchId))
+        {
+            BatchId = batchId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(ipcClass))
+        {
+            IpcClass = ipcClass;
+        }
+
+        ApplyInspectionResult(envelope);
+        HasResult = true;
+        HasError = false;
+        StatusOrErrorMessage = "Loaded recorded inspection fixture (no live backend).";
+    }
+
     private void ApplyInspectionResult(UploadTriageEnvelope envelope)
     {
         UploadTriageResponseDto dto = envelope.Response;
