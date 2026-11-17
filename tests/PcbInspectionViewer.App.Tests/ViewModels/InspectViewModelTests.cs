@@ -91,6 +91,56 @@ public sealed class InspectViewModelTests : IDisposable
     }
 
     [Fact]
+    public void ShowRecordedResult_AppliesFixtureDispositionAndDefectsWithoutCallingApi()
+    {
+        var apiClient = Substitute.For<IInspectionApiClient>();
+        var settingsService = Substitute.For<ISettingsService>();
+        var sut = new InspectViewModel(apiClient, settingsService);
+
+        var detection = new BoundingBoxDetectionDto
+        {
+            X1 = 10,
+            Y1 = 20,
+            X2 = 40,
+            Y2 = 60,
+            DefectClass = "Short",
+            Confidence = 0.91
+        };
+        var decision = new InspectionDecisionDto
+        {
+            DetectionIndex = 0,
+            DefectClass = "Short",
+            Disposition = "SCRAP",
+            Severity = "CRITICAL"
+        };
+        var dto = new UploadTriageResponseDto
+        {
+            BoardDisposition = "SCRAP",
+            BatchId = "BATCH-FIXTURE",
+            IpcClass = "Class 2",
+            TestB64 = "data:image/png;base64,AAAA",
+            Report = new BoardInspectionReportDto
+            {
+                Stage1LatencyMs = 12.5,
+                Detections = [detection],
+                Decisions = [decision]
+            }
+        };
+
+        sut.ShowRecordedResult(new UploadTriageEnvelope(dto, RoundTripMs: 4.0), dto.BatchId, dto.IpcClass);
+
+        sut.HasResult.Should().BeTrue();
+        sut.HasError.Should().BeFalse();
+        sut.VerdictText.Should().Be("SCRAP");
+        sut.BatchId.Should().Be("BATCH-FIXTURE");
+        sut.IpcClass.Should().Be("Class 2");
+        sut.Detections.Should().HaveCount(1);
+        sut.AlignedDefects.Should().HaveCount(1);
+        sut.ActiveImageDataUri.Should().Be(dto.TestB64);
+        apiClient.DidNotReceiveWithAnyArgs().UploadTriageAsync(default!, default);
+    }
+
+    [Fact]
     public async Task InspectCommand_WhileRunning_DisablesInspectAndCancelCancelsInFlightRequest()
     {
         var tcs = new TaskCompletionSource<UploadTriageEnvelope>();

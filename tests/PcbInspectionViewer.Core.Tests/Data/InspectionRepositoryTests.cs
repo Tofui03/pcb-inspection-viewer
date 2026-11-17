@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using PcbInspectionViewer.Core.Api.Dtos;
 using PcbInspectionViewer.Core.Data;
@@ -12,6 +13,7 @@ public sealed class InspectionRepositoryTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly string _dbPath;
+    private readonly string _connectionString;
     private readonly ImageCache _imageCache;
     private readonly DbContextOptions<InspectionDbContext> _dbOptions;
 
@@ -24,8 +26,11 @@ public sealed class InspectionRepositoryTests : IDisposable
 
         _imageCache = new ImageCache(cacheDir);
 
+        // Pooling keeps the db file locked after DbContext.Dispose. Windows then
+        // refuses to delete it, and xUnit reports that Dispose exception as a failure.
+        _connectionString = $"Data Source={_dbPath};Mode=ReadWriteCreate;Cache=Private;Pooling=False";
         _dbOptions = new DbContextOptionsBuilder<InspectionDbContext>()
-            .UseSqlite($"Data Source={_dbPath}")
+            .UseSqlite(_connectionString)
             .Options;
 
         using var db = new InspectionDbContext(_dbOptions);
@@ -160,9 +165,34 @@ public sealed class InspectionRepositoryTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_tempDir))
+        ReleaseSqliteFile();
+
+        const int maxAttempts = 8;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            Directory.Delete(_tempDir, recursive: true);
+            try
+            {
+                if (Directory.Exists(_tempDir))
+                {
+                    Directory.Delete(_tempDir, recursive: true);
+                }
+
+                return;
+            }
+            catch (IOException) when (attempt < maxAttempts)
+            {
+                ReleaseSqliteFile();
+                Thread.Sleep(100 * attempt);
+            }
         }
+    }
+
+    private void ReleaseSqliteFile()
+    {
+        using var connection = new SqliteConnection(_connectionString);
+        SqliteConnection.ClearPool(connection);
+        SqliteConnection.ClearAllPools();
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
     }
 }
