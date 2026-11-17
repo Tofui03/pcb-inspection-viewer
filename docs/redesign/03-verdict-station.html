@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Verdict station — PCB Inspection Viewer</title>
+<style>
+  :root { --ink: #141414; --muted: #5c5c5c; --scrap: #c81e1e; --bg: #f3f3f1; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 18px/1.2 "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+  button, input { font: inherit; color: inherit; background: none; border: 0; }
+  button { cursor: pointer; padding: 0; }
+  body { display: flex; flex-direction: column; }
+  #app { flex: 1; min-height: 0; }
+  .window { height: 100%; display: flex; flex-direction: column; background: var(--bg); }
+  .window.scrap { background: #f8ecec; }
+  nav { display: flex; height: 64px; border-bottom: 1px solid #ddd; }
+  nav button { flex: 1; font-size: 16px; font-weight: 650; color: var(--muted); }
+  nav button.on { color: var(--ink); background: #fff; }
+  .stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px 32px 8px; text-align: center; }
+  .word { font-size: 132px; font-weight: 780; letter-spacing: -0.05em; line-height: 0.86; margin: 0; }
+  .word.scrap { color: var(--scrap); }
+  .sub { margin-top: 18px; font-size: 22px; color: var(--muted); max-width: 920px; }
+  .thumb { width: 220px; height: 120px; margin-bottom: 8px; }
+  .thumb svg { width: 100%; height: 100%; }
+  .go { height: 96px; width: 100%; background: #111; color: #fff; font-size: 28px; font-weight: 750; letter-spacing: 0.14em; flex: none; }
+  .page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 18px 28px; border-bottom: 1px solid #e4e4e0; font-size: 28px; font-weight: 650; }
+  .kpis { display: flex; flex: 1; }
+  .kpis div { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .kpis b { font-size: 72px; font-weight: 750; letter-spacing: -0.04em; line-height: 1; }
+  .kpis span { margin-top: 8px; color: var(--muted); font-size: 16px; letter-spacing: 0.08em; }
+  .ask, .settings { padding: 28px 32px; display: flex; flex-direction: column; gap: 16px; flex: 1; }
+  .ask input, .settings input { font-size: 28px; border-bottom: 2px solid #ccc; padding: 8px 0; background: transparent; outline: none; width: 100%; }
+  .settings { display: grid; grid-template-columns: 220px 1fr; gap: 14px 20px; align-content: start; }
+  .settings span { font-size: 20px; color: var(--muted); align-self: center; }
+  pre { margin: 0; font: 16px/1.4 ui-monospace, Consolas, monospace; color: var(--muted); white-space: pre-wrap; text-align: left; }
+  #chrome { height: 34px; flex: none; background: #161616; color: #ddd; display: flex; align-items: center; gap: 6px; padding: 0 8px; font: 11px/1 ui-monospace, Consolas, monospace; }
+  #chrome button { color: #ccc; border: 1px solid #333; background: #222; padding: 3px 7px; border-radius: 3px; font: 11px/1 ui-monospace, Consolas, monospace; }
+  #chrome button.on { color: #fff; border-color: #aaa; }
+  #chrome .sep { width: 1px; height: 14px; background: #333; margin: 0 4px; }
+  #notes { display: none; position: fixed; z-index: 8; top: 42px; right: 10px; width: 280px; background: #fffef8; color: #1c1b19; border: 1px solid #e4e0d8; padding: 10px 12px 12px; font: 12px/1.45 "Segoe UI", system-ui, sans-serif; text-align: left; }
+  #notes b { display: block; margin: 8px 0 2px; }
+  body.show-ann #notes { display: block; }
+  body.no-chrome #chrome, body.no-chrome #notes { display: none; }
+</style>
+</head>
+<body>
+<div id="chrome">
+  <span>PROTOTYPE</span><i class="sep"></i>
+  <button data-act="flow:empty">Empty</button>
+  <button data-act="flow:loaded">Loaded</button>
+  <button data-act="flow:inspecting">Inspecting</button>
+  <button data-act="flow:result">Result</button>
+  <i class="sep"></i>
+  <button data-act="error:none">Clear</button>
+  <button data-act="error:offline">Offline</button>
+  <button data-act="error:pair">Bad pair</button>
+  <button data-act="error:llm">Fallback</button>
+  <button data-act="error:sql">SqlGuard</button>
+  <i class="sep"></i>
+  <button data-act="ann">Notes</button>
+</div>
+<div id="app"></div>
+<aside id="notes">
+  <b>Seen first</b>
+  The disposition, in huge type.
+  <b>One action</b>
+  The bar along the bottom.
+  <b>Where it goes</b>
+  LOAD brings in the pair. INSPECT lands on SCRAP. NEXT clears it.
+  <b>Errors</b>
+  The huge word changes. OFFLINE, PAIR, or FALLBACK. FALLBACK keeps SCRAP above it. Ask uses the word REJECT.
+</aside>
+<script>
+const SQL_OK = "SELECT Id, FileName, BatchId, DefectCount, DefectClassesSummary FROM v_inspections WHERE BoardDisposition = 'SCRAP' ORDER BY InspectedAtUtc DESC LIMIT 50";
+const SQL_BAD = "SELECT * FROM Inspections";
+const SQL_REJECT = "Access to table or view 'Inspections' is not allowed. Only allowlisted views (v_inspections, v_defects, v_batches) may be queried.";
+const q = new URLSearchParams(location.search);
+const state = { tab: q.get("tab") || "inspect", flow: q.get("state") || "empty", error: q.get("error") || "", ann: q.get("ann") === "1", batchOn: false, askOn: false, saved: false };
+if (state.error === "sql") state.tab = q.get("tab") || "ask";
+if (state.error === "llm") state.flow = "result";
+if ((state.error === "offline" || state.error === "pair") && state.flow === "empty") state.flow = "loaded";
+if (q.get("chrome") === "0") document.body.classList.add("no-chrome");
+if (state.ann) document.body.classList.add("show-ann");
+let pending = 0;
+const TABS = [["inspect","Inspect"],["batch","Batch"],["history","History"],["dashboard","Dashboard"],["ask","Ask"],["settings","Settings"]];
+
+function thumb() {
+  return `<div class="thumb"><svg viewBox="150 70 320 390"><rect x="160" y="80" width="300" height="370" rx="8" fill="#1f6b45"/>
+    <g fill="none" stroke="#e6c27a" stroke-width="6"><path d="M190 100 V210 M210 100 V210 M190 150 H214"/><path d="M400 110 V280 M400 330 V430"/></g>
+    <rect x="177" y="101" width="49" height="95" fill="none" stroke="#c81e1e" stroke-width="6"/>
+    <rect x="378" y="275" width="63" height="47" fill="none" stroke="#c81e1e" stroke-width="6"/>
+    <rect x="400" y="386" width="43" height="46" fill="none" stroke="#c81e1e" stroke-width="6"/>
+  </svg></div>`;
+}
+
+function keyLabel() {
+  if (state.error === "offline") return "RETRY";
+  if (state.error === "pair") return "INSPECT";
+  if (state.flow === "empty") return "LOAD";
+  if (state.flow === "loaded") return "INSPECT";
+  if (state.flow === "inspecting") return "CANCEL";
+  return "NEXT";
+}
+
+function wordBlock() {
+  if (state.error === "offline") return `<p class="word">OFFLINE</p><p class="sub">Backend request failed after 3 attempts.</p>`;
+  if (state.error === "pair") return `<p class="word">PAIR</p><p class="sub">Template and test differ in size.</p>`;
+  if (state.flow === "empty") return `<p class="word" style="color:#c8c8c4">—</p>`;
+  if (state.flow === "loaded") return `<p class="word" style="font-size:84px">READY</p><p class="sub">20085000_test</p>`;
+  if (state.flow === "inspecting") return `<p class="word" style="color:#c8c8c4">…</p>`;
+  const fallback = state.error === "llm" ? `<p class="sub">Template fallback. SCRAP unchanged.</p>` : `<p class="sub">IPC-A-600 · Short 0.92 · Open 0.82 · Open 0.75</p>`;
+  return `${state.flow === "result" ? thumb() : ""}<p class="word scrap">SCRAP</p>${fallback}`;
+}
+
+function shell(inner, scrap) {
+  const nav = TABS.map(([id, label]) => `<button data-act="tab:${id}" class="${state.tab===id?"on":""}">${label}</button>`).join("");
+  return `<div class="window ${scrap ? "scrap" : ""}"><nav>${nav}</nav>${inner}</div>`;
+}
+
+function inspectBody() {
+  const scrap = (state.flow === "result" || state.error === "llm") && state.error !== "offline" && state.error !== "pair";
+  return shell(`<div class="stage">${wordBlock()}</div><button class="go" data-act="primary">${keyLabel()}</button>`, scrap);
+}
+
+function batchBody() {
+  const row = state.batchOn
+    ? `<div class="row"><span>20085000_test</span><b style="color:#c81e1e">SCRAP</b></div>`
+    : `<div class="stage"><p class="word" style="font-size:72px">BATCH-FIXTURE</p></div>`;
+  return shell(`<div class="page">${row}</div><button class="go" data-act="primary">${state.batchOn ? "OPEN" : "START"}</button>`, state.batchOn);
+}
+
+function historyBody() {
+  return shell(`<div class="page"><div class="row"><span>20085000_test</span><b style="color:#c81e1e">SCRAP</b></div></div><button class="go" data-act="primary">OPEN</button>`, true);
+}
+
+function dashBody() {
+  return shell(`<div class="page"><div class="kpis">
+    <div><b>1</b><span>INSPECTED</span></div>
+    <div><b>0</b><span>PASS</span></div>
+    <div><b>0</b><span>REWORK</span></div>
+    <div><b style="color:#c81e1e">1</b><span>SCRAP</span></div>
+    <div><b>0%</b><span>YIELD</span></div>
+  </div></div><button class="go" data-act="primary">REFRESH</button>`, false);
+}
+
+function askBody() {
+  const bad = state.error === "sql";
+  if (bad) {
+    return shell(`<div class="stage"><p class="word" style="font-size:108px">REJECT</p><p class="sub">${SQL_REJECT}</p></div><button class="go" data-act="primary">RUN</button>`, false);
+  }
+  const extra = state.askOn ? `<pre>${SQL_OK}</pre><p class="sub" style="text-align:left">20085000_test · SCRAP · 3 · Short, Open</p>` : "";
+  return shell(`<div class="ask"><input value="scrap boards" aria-label="Question">${extra}</div><button class="go" data-act="primary">ASK</button>`, false);
+}
+
+function settingsBody() {
+  const rows = [["API","http://localhost:8000"],["Timeout","10"],["Concurrency","2"],["IPC","Class 2"],["Batch","BATCH-UPLOAD"],["LLM","None"],["Model","gemini-2.5-flash"],["Language","en"]]
+    .map(([k,v]) => `<span>${k}</span><input value="${v}" aria-label="${k}">`).join("");
+  return shell(`<div class="settings">${rows}</div><button class="go" data-act="primary">${state.saved ? "SAVED" : "SAVE"}</button>`, false);
+}
+
+function render() {
+  const map = { inspect: inspectBody, batch: batchBody, history: historyBody, dashboard: dashBody, ask: askBody, settings: settingsBody };
+  document.getElementById("app").innerHTML = map[state.tab]();
+  document.querySelectorAll("#chrome [data-act^='flow:']").forEach(b => b.classList.toggle("on", !state.error && b.dataset.act === "flow:" + state.flow));
+  document.querySelectorAll("#chrome [data-act^='error:']").forEach(b => b.classList.toggle("on", b.dataset.act === "error:" + (state.error || "none")));
+}
+
+function onPrimary() {
+  clearTimeout(pending);
+  if (state.tab === "inspect") {
+    if (state.error === "offline" || state.error === "pair") return;
+    if (state.error === "llm") { state.error = ""; state.flow = "empty"; render(); return; }
+    if (state.flow === "empty") state.flow = "loaded";
+    else if (state.flow === "loaded") {
+      state.flow = "inspecting"; render();
+      pending = setTimeout(() => { state.flow = "result"; render(); }, 800);
+      return;
+    } else if (state.flow === "inspecting") state.flow = "loaded";
+    else { state.flow = "empty"; state.error = ""; }
+    render(); return;
+  }
+  if (state.tab === "batch") {
+    if (!state.batchOn) state.batchOn = true;
+    else { state.tab = "inspect"; state.flow = "result"; state.error = ""; }
+  } else if (state.tab === "history") { state.tab = "inspect"; state.flow = "result"; state.error = ""; }
+  else if (state.tab === "ask") { if (state.error === "sql") return; state.askOn = true; }
+  else if (state.tab === "settings") state.saved = true;
+  render();
+}
+
+document.body.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-act]");
+  if (!el) return;
+  const act = el.dataset.act;
+  if (act === "ann") { state.ann = !state.ann; document.body.classList.toggle("show-ann", state.ann); return; }
+  if (act === "primary") return onPrimary();
+  if (act.startsWith("tab:")) { state.tab = act.slice(4); render(); return; }
+  if (act.startsWith("flow:")) { clearTimeout(pending); state.flow = act.slice(5); state.error = ""; state.tab = "inspect"; render(); return; }
+  if (act.startsWith("error:")) {
+    clearTimeout(pending);
+    const err = act.slice(6);
+    state.error = err === "none" ? "" : err;
+    state.tab = state.error === "sql" ? "ask" : "inspect";
+    if (state.error === "llm") state.flow = "result";
+    if (state.error === "offline" || state.error === "pair") state.flow = "loaded";
+    render();
+  }
+});
+render();
+</script>
+</body>
+</html>

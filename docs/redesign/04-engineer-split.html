@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Engineer split — PCB Inspection Viewer</title>
+<style>
+  :root { --bg: #d4d4d4; --panel: #f4f4f4; --ink: #1a1a1a; --muted: #5a5a5a; --line: #b9b9b9; --scrap: #b42318; --sel: #d6e6f5; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 12px/1.35 "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+  button, input { font: inherit; color: inherit; }
+  button { background: none; border: 0; cursor: pointer; padding: 0; text-align: left; }
+  body { display: flex; flex-direction: column; }
+  #app { flex: 1; min-height: 0; }
+  .window { height: 100%; display: flex; flex-direction: column; background: #ececec; }
+  .titlebar { height: 26px; background: #2c2c2c; color: #eee; display: flex; align-items: center; padding: 0 10px; font-size: 12px; }
+  .toolbar { height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 8px; background: #e6e6e6; border-bottom: 1px solid var(--line); }
+  .primary { background: #1a1a1a; color: #fff; height: 22px; padding: 0 10px; }
+  .tool { height: 22px; padding: 0 8px; border: 1px solid transparent; color: var(--muted); }
+  .tool.on { border-color: var(--line); background: #fff; color: var(--ink); }
+  .work { flex: 1; min-height: 0; display: flex; }
+  .rail { width: 156px; background: #efefef; border-right: 1px solid var(--line); padding: 6px 0; }
+  .rail button { display: block; width: 100%; padding: 5px 10px; color: #333; }
+  .rail button.on { background: #fff; font-weight: 650; }
+  .canvas { flex: 1; min-width: 0; min-height: 0; position: relative; background: #cfcfcf; }
+  .canvas svg { position: absolute; left: 8px; top: 8px; width: calc(100% - 16px); height: calc(100% - 16px); background: #f7f7f7; border: 1px solid var(--line); }
+  .inspector { width: 320px; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .dlist button { display: grid; grid-template-columns: 18px 64px 56px 1fr; gap: 6px; width: 100%; padding: 4px 8px; border-bottom: 1px solid #e5e5e5; }
+  .dlist button.on { background: var(--sel); }
+  .props { padding: 8px 10px; overflow: auto; }
+  .props h2 { margin: 0 0 4px; font-size: 16px; }
+  .props .disp { color: var(--scrap); font-weight: 750; }
+  .kv { display: grid; grid-template-columns: 72px 1fr; gap: 2px 8px; margin: 6px 0; }
+  .kv span { color: var(--muted); }
+  .props p { margin: 6px 0; }
+  .status { height: 22px; background: #2a2a2a; color: #ddd; display: flex; align-items: center; gap: 14px; padding: 0 8px; font-size: 11px; }
+  .status .bad { color: #ffb4ab; }
+  .main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #fff; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-weight: 650; color: var(--muted); padding: 4px 8px; border-bottom: 1px solid var(--line); background: #f3f3f3; }
+  td { padding: 4px 8px; border-bottom: 1px solid #eee; }
+  .pad { padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
+  input { border: 1px solid var(--line); background: #fff; padding: 3px 6px; }
+  pre { margin: 0; font: 11px/1.4 ui-monospace, Consolas, monospace; background: #f6f6f6; border: 1px solid var(--line); padding: 6px; white-space: pre-wrap; }
+  .err { color: var(--scrap); }
+  #chrome { height: 34px; flex: none; background: #161616; color: #ddd; display: flex; align-items: center; gap: 6px; padding: 0 8px; font: 11px/1 ui-monospace, Consolas, monospace; }
+  #chrome button { color: #ccc; border: 1px solid #333; background: #222; padding: 3px 7px; }
+  #chrome button.on { color: #fff; border-color: #aaa; }
+  #chrome .sep { width: 1px; height: 14px; background: #333; margin: 0 4px; }
+  #notes { display: none; position: fixed; z-index: 8; top: 42px; right: 10px; width: 280px; background: #fffef8; color: #1c1b19; border: 1px solid #e4e0d8; padding: 10px 12px 12px; font: 12px/1.45 "Segoe UI", system-ui, sans-serif; }
+  #notes b { display: block; margin: 8px 0 2px; }
+  body.show-ann #notes { display: block; }
+  body.no-chrome #chrome, body.no-chrome #notes { display: none; }
+</style>
+</head>
+<body>
+<div id="chrome">
+  <span>PROTOTYPE</span><i class="sep"></i>
+  <button data-act="flow:empty">Empty</button>
+  <button data-act="flow:loaded">Loaded</button>
+  <button data-act="flow:inspecting">Inspecting</button>
+  <button data-act="flow:result">Result</button>
+  <i class="sep"></i>
+  <button data-act="error:none">Clear</button>
+  <button data-act="error:offline">Offline</button>
+  <button data-act="error:pair">Bad pair</button>
+  <button data-act="error:llm">Fallback</button>
+  <button data-act="error:sql">SqlGuard</button>
+  <i class="sep"></i>
+  <button data-act="ann">Notes</button>
+</div>
+<div id="app"></div>
+<aside id="notes">
+  <b>Seen first</b>
+  The board and the selected defect, side by side.
+  <b>One action</b>
+  Inspect on the toolbar. It becomes Next board after a result.
+  <b>Where it goes</b>
+  Inspect fills the property pane. Next board clears both panes.
+  <b>Errors</b>
+  The status bar. A bad pair and an offline backend stay there. Template fallback is a status token and does not change the disposition. Ask replaces the grid with the SqlGuard sentence.
+</aside>
+<script>
+const DEFECTS = [
+  { cls: "Short", conf: "0.9164", ipc: "IPC-A-600 Section 2.2.2 (Short / Bridging)", x1: 177, y1: 101, x2: 226, y2: 196, area: "4655 px", pct: "1.14%", sev: "CRITICAL", risk: "Unintended conductive bridge between traces risking dead short, overcurrent, and thermal runaway.", cause: "Under-etching, exhausted etchant bath chemistry, or developer residue between adjacent traces.", action: "Scrap or isolate bridged board; titrate copper etchant solution and verify conveyor dwell speed." },
+  { cls: "Open", conf: "0.8241", ipc: "IPC-A-600 Section 2.2.1 (Open Circuit)", x1: 378, y1: 275, x2: 441, y2: 322, area: "2961 px", pct: "0.72%", sev: "CRITICAL", risk: "Complete circuit discontinuity causing open signal net or interrupted power delivery.", cause: "Over-etching, photoresist flaking, or mechanical scratch on photomask film.", action: "Scrap defective PCB immediately; inspect photoresist lamination rollers and etchant spray nozzle pressure." },
+  { cls: "Open", conf: "0.7467", ipc: "IPC-A-600 Section 2.2.1 (Open Circuit)", x1: 400, y1: 386, x2: 443, y2: 432, area: "1978 px", pct: "0.48%", sev: "CRITICAL", risk: "Complete circuit discontinuity causing open signal net or interrupted power delivery.", cause: "Over-etching, photoresist flaking, or mechanical scratch on photomask film.", action: "Scrap defective PCB immediately; inspect photoresist lamination rollers and etchant spray nozzle pressure." }
+];
+const SQL_OK = "SELECT Id, FileName, BatchId, DefectCount, DefectClassesSummary FROM v_inspections WHERE BoardDisposition = 'SCRAP' ORDER BY InspectedAtUtc DESC LIMIT 50";
+const SQL_BAD = "SELECT * FROM Inspections";
+const SQL_REJECT = "Execution rejected by SqlGuard: Access to table or view 'Inspections' is not allowed. Only allowlisted views (v_inspections, v_defects, v_batches) may be queried.";
+const q = new URLSearchParams(location.search);
+const state = { tab: q.get("tab") || "inspect", flow: q.get("state") || "empty", error: q.get("error") || "", ann: q.get("ann") === "1", batchOn: false, askOn: false, saved: false, defect: 0, layer: "Test", generated: false };
+if (state.error === "sql") state.tab = q.get("tab") || "ask";
+if (state.error === "llm") state.flow = "result";
+if ((state.error === "offline" || state.error === "pair") && state.flow === "empty") state.flow = "loaded";
+if (q.get("chrome") === "0") document.body.classList.add("no-chrome");
+if (state.ann) document.body.classList.add("show-ann");
+let pending = 0;
+const TABS = [["inspect","Single Inspect"],["batch","Batch"],["history","History"],["dashboard","Dashboard"],["ask","Ask"],["settings","Settings"]];
+
+function board(boxes) {
+  const marks = boxes ? DEFECTS.map((d, i) => {
+    const w = d.x2 - d.x1, h = d.y2 - d.y1;
+    return `<g data-act="defect:${i}"><rect x="${d.x1}" y="${d.y1}" width="${w}" height="${h}" fill="none" stroke="${state.defect===i?"#b42318":"#1d4e89"}" stroke-width="${state.defect===i?2.5:1.25}"/><text x="${d.x1+2}" y="${d.y1+11}" fill="#1a1a1a" font-size="11" font-family="Segoe UI,sans-serif">${i}</text></g>`;
+  }).join("") : "";
+  const tint = state.layer === "Diff" ? "#f3d0d8" : state.layer === "Template" ? "#e7efe4" : "#d5e2d2";
+  return `<svg viewBox="150 70 320 390" preserveAspectRatio="xMidYMid meet">
+    <rect x="160" y="80" width="300" height="370" fill="${tint}" stroke="#9a9a9a"/>
+    <g fill="none" stroke="#8a6232" stroke-width="1.6"><path d="M190 90 V200 M210 90 V200 M190 140 H214"/><path d="M400 100 V286 M400 318 V440"/><path d="M250 200 H360 V300"/></g>
+    <rect x="248" y="168" width="64" height="36" fill="#2a2a2a"/>
+    ${marks}
+  </svg>`;
+}
+
+function primaryLabel() {
+  if (state.error === "offline") return "Retry";
+  if (state.error === "pair") return "Inspect";
+  if (state.flow === "empty") return "Load images";
+  if (state.flow === "loaded") return "Inspect";
+  if (state.flow === "inspecting") return "Cancel";
+  return "Next board";
+}
+
+function statusText() {
+  if (state.error === "offline") return `<span class="bad">Backend offline — request failed after 3 attempts</span>`;
+  if (state.error === "pair") return `<span class="bad">Inspection API error (400): template and test images differ in size</span>`;
+  const llm = state.error === "llm" ? "LLM: None (Template fallback)" : "LLM: None";
+  const lat = state.flow === "result" ? "86.3 ms" : "";
+  return `<span>${state.error === "offline" ? "Backend offline" : "Backend online"}</span><span>onnx</span><span>inspections.db</span><span>${llm}</span><span>UPLOAD:20085000_test</span><span>${lat}</span>`;
+}
+
+function rail() {
+  return `<div class="rail">${TABS.map(([id, label]) => `<button data-act="tab:${id}" class="${state.tab===id?"on":""}">${label}</button>`).join("")}</div>`;
+}
+
+function inspector() {
+  const show = state.flow === "result" || state.error === "llm";
+  if (!show) {
+    const files = state.flow === "empty" ? "" : `<div class="props"><div class="kv"><span>Template</span><b>20085000_temp.png</b><span>Test</span><b>20085000_test.png</b><span>Batch</span><b>BATCH-FIXTURE</b><span>IPC</span><b>Class 2</b></div></div>`;
+    return `<aside class="inspector">${files}</aside>`;
+  }
+  const d = DEFECTS[state.defect];
+  const list = DEFECTS.map((item, i) => `<button class="${state.defect===i?"on":""}" data-act="defect:${i}"><span>${i}</span><b>${item.cls}</b><span>${item.conf}</span><span>SCRAP</span></button>`).join("");
+  return `<aside class="inspector"><div class="dlist">${list}</div><div class="props">
+    <h2>${d.cls} <span class="disp">SCRAP</span></h2>
+    <div class="kv"><span>Confidence</span><b>${d.conf}</b><span>Severity</span><b>${d.sev}</b><span>BBox</span><b>${d.x1},${d.y1}–${d.x2},${d.y2}</b><span>Area</span><b>${d.area} · ${d.pct}</b><span>Clause</span><b>${d.ipc}</b></div>
+    <p>${d.risk}</p><p>${d.cause}</p><p>${d.action}</p>
+  </div></aside>`;
+}
+
+function toolbar() {
+  const layers = ["Test","Template","Diff"].map(l => `<button class="tool ${state.layer===l?"on":""}" data-act="layer:${l}">${l}</button>`).join("");
+  return `<div class="toolbar"><button class="primary" data-act="primary">${primaryLabel()}</button>${layers}</div>`;
+}
+
+function shell(center) {
+  return `<div class="window"><div class="titlebar">PCB Inspection Viewer</div>${state.tab==="inspect"?toolbar():""}<div class="work">${rail()}<div class="main">${center}</div>${state.tab==="inspect"?inspector():""}</div><div class="status">${statusText()}</div></div>`;
+}
+
+function inspectCenter() {
+  const show = state.flow === "result" || state.error === "llm";
+  if (state.flow === "empty" && !state.error) return `<div class="canvas"></div>`;
+  return `<div class="canvas">${board(show)}</div>`;
+}
+
+function batchCenter() {
+  const body = state.batchOn ? `<tr><td>1</td><td>20085000_test.png</td><td>Completed</td><td style="color:#b42318;font-weight:700">SCRAP</td><td>3</td><td>86.3 ms</td></tr>` : "";
+  return `<div class="pad"><table><thead><tr><th>#</th><th>File</th><th>Status</th><th>Verdict</th><th>Defects</th><th>Stage-1</th></tr></thead><tbody>${body}</tbody></table><div style="flex:1"></div><button class="primary" data-act="primary" style="align-self:flex-start">${state.batchOn?"Open":"Start"}</button></div>`;
+}
+
+function historyCenter() {
+  return `<div class="pad"><table><thead><tr><th>File</th><th>Batch</th><th>Verdict</th><th>Defects</th><th>Classes</th><th>Stage-1</th></tr></thead><tbody>
+    <tr><td>20085000_test.png</td><td>BATCH-FIXTURE</td><td style="color:#b42318;font-weight:700">SCRAP</td><td>3</td><td>Short, Open</td><td>86.3 ms</td></tr>
+  </tbody></table><div style="flex:1"></div><button class="primary" data-act="primary" style="align-self:flex-start">Open</button></div>`;
+}
+
+function dashCenter() {
+  return `<div class="pad"><table><thead><tr><th>Inspected</th><th>Pass</th><th>Rework</th><th>Scrap</th><th>Yield</th></tr></thead><tbody><tr><td>1</td><td>0</td><td>0</td><td>1</td><td>0%</td></tr></tbody></table>
+    <table><thead><tr><th>Defect class</th><th>Count</th><th>Share</th></tr></thead><tbody><tr><td>Open</td><td>2</td><td>66.7%</td></tr><tr><td>Short</td><td>1</td><td>33.3%</td></tr></tbody></table>
+    <div style="flex:1"></div><button class="primary" data-act="primary" style="align-self:flex-start">Refresh</button></div>`;
+}
+
+function askCenter() {
+  const bad = state.error === "sql";
+  const question = bad ? "read the Inspections table" : "scrap boards";
+  let below = "";
+  if (bad) below = `<pre>${SQL_BAD}</pre><p class="err">${SQL_REJECT}</p>`;
+  else if (state.generated && !state.askOn) below = `<pre>${SQL_OK}</pre>`;
+  else if (state.askOn) below = `<pre>${SQL_OK}</pre><table><thead><tr><th>File</th><th>Batch</th><th>Verdict</th><th>Defects</th><th>Classes</th></tr></thead><tbody><tr><td>20085000_test.png</td><td>BATCH-FIXTURE</td><td>SCRAP</td><td>3</td><td>Short, Open</td></tr></tbody></table>`;
+  const label = bad ? "Run" : state.generated ? "Run" : "Generate";
+  return `<div class="pad"><input value="${question}" aria-label="Question" style="width:100%">${below}<button class="primary" data-act="primary" style="align-self:flex-start">${label}</button></div>`;
+}
+
+function settingsCenter() {
+  const rows = [["API base URL","http://localhost:8000"],["Timeout seconds","10"],["Concurrency","2"],["IPC class","Class 2"],["Batch id","BATCH-UPLOAD"],["Colorize PCB","false"],["LLM provider","None"],["Model","gemini-2.5-flash"],["Language","en"]];
+  return `<div class="pad"><table><tbody>${rows.map(([k,v]) => `<tr><td style="color:#5a5a5a;width:140px">${k}</td><td><input value="${v}" aria-label="${k}" style="width:260px"></td></tr>`).join("")}</tbody></table><div style="flex:1"></div><button class="primary" data-act="primary" style="align-self:flex-start">${state.saved?"Saved":"Save"}</button></div>`;
+}
+
+function render() {
+  const center = { inspect: inspectCenter, batch: batchCenter, history: historyCenter, dashboard: dashCenter, ask: askCenter, settings: settingsCenter }[state.tab]();
+  document.getElementById("app").innerHTML = shell(center);
+  document.querySelectorAll("#chrome [data-act^='flow:']").forEach(b => b.classList.toggle("on", !state.error && b.dataset.act === "flow:" + state.flow));
+  document.querySelectorAll("#chrome [data-act^='error:']").forEach(b => b.classList.toggle("on", b.dataset.act === "error:" + (state.error || "none")));
+}
+
+function onPrimary() {
+  clearTimeout(pending);
+  if (state.tab === "inspect") {
+    if (state.error === "offline" || state.error === "pair") return;
+    if (state.error === "llm") { state.error = ""; state.flow = "empty"; render(); return; }
+    if (state.flow === "empty") state.flow = "loaded";
+    else if (state.flow === "loaded") {
+      state.flow = "inspecting"; render();
+      pending = setTimeout(() => { state.flow = "result"; render(); }, 800);
+      return;
+    } else if (state.flow === "inspecting") state.flow = "loaded";
+    else { state.flow = "empty"; state.error = ""; }
+    render(); return;
+  }
+  if (state.tab === "batch") {
+    if (!state.batchOn) state.batchOn = true;
+    else { state.tab = "inspect"; state.flow = "result"; state.error = ""; }
+  } else if (state.tab === "history") { state.tab = "inspect"; state.flow = "result"; state.error = ""; }
+  else if (state.tab === "ask") {
+    if (state.error === "sql") return;
+    if (!state.generated) state.generated = true;
+    else state.askOn = true;
+  } else if (state.tab === "settings") state.saved = true;
+  render();
+}
+
+document.body.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-act]");
+  if (!el) return;
+  const act = el.dataset.act;
+  if (act === "ann") { state.ann = !state.ann; document.body.classList.toggle("show-ann", state.ann); return; }
+  if (act === "primary") return onPrimary();
+  if (act.startsWith("tab:")) { state.tab = act.slice(4); render(); return; }
+  if (act.startsWith("defect:")) { state.defect = Number(act.slice(7)); render(); return; }
+  if (act.startsWith("layer:")) { state.layer = act.slice(6); render(); return; }
+  if (act.startsWith("flow:")) { clearTimeout(pending); state.flow = act.slice(5); state.error = ""; state.tab = "inspect"; render(); return; }
+  if (act.startsWith("error:")) {
+    clearTimeout(pending);
+    const err = act.slice(6);
+    state.error = err === "none" ? "" : err;
+    state.tab = state.error === "sql" ? "ask" : "inspect";
+    if (state.error === "llm") state.flow = "result";
+    if (state.error === "offline" || state.error === "pair") state.flow = "loaded";
+    render();
+  }
+});
+render();
+</script>
+</body>
+</html>

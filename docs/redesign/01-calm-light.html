@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Calm light — PCB Inspection Viewer</title>
+<style>
+  :root {
+    --bg: #f6f5f2;
+    --ink: #1c1b19;
+    --muted: #6f6b64;
+    --line: #e4e0d8;
+    --scrap: #8d2f2f;
+    --paper: #fcfcfb;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 14px/1.4 "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+  button, input { font: inherit; color: inherit; }
+  button { background: none; border: 0; cursor: pointer; padding: 0; }
+  .window { height: 100%; display: flex; flex-direction: column; background: var(--paper); }
+  .titlebar { height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; color: var(--muted); font-size: 12px; }
+  .dots { display: flex; gap: 6px; }
+  .dots i { width: 8px; height: 8px; border-radius: 50%; background: #e4e0d8; display: block; }
+  nav { display: flex; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--line); }
+  nav button { padding: 8px 12px 7px; color: var(--muted); border-bottom: 2px solid transparent; }
+  nav button.on { color: var(--ink); border-bottom-color: var(--ink); }
+  .body { flex: 1; min-height: 0; }
+  footer { height: 28px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 16px; padding: 0 16px; color: var(--muted); font-size: 12px; }
+  footer .bad { color: var(--scrap); }
+  .split { height: 100%; display: flex; min-height: 0; }
+  .canvas { flex: 1; min-width: 0; padding: 16px 8px 16px 16px; }
+  .canvas svg { width: 100%; height: 100%; display: block; }
+  .side { width: 340px; border-left: 1px solid var(--line); padding: 28px 24px 20px; display: flex; flex-direction: column; }
+  .verdict { font-size: 48px; line-height: 1; letter-spacing: -0.04em; font-weight: 560; color: var(--scrap); margin: 0 0 18px; }
+  .quiet { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  .files { font-size: 15px; margin-bottom: 18px; }
+  .row { display: flex; justify-content: space-between; gap: 12px; width: 100%; padding: 9px 0; border-top: 1px solid var(--line); text-align: left; }
+  .row.on { background: #f3f1ec; margin: 0 -8px; padding-left: 8px; padding-right: 8px; }
+  .row span:last-child { color: var(--muted); text-align: right; }
+  .num { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .grow { flex: 1; }
+  .primary { align-self: flex-start; background: var(--ink); color: #fff; height: 36px; padding: 0 18px; border-radius: 8px; }
+  .err { color: var(--scrap); font-size: 13px; margin: 0 0 16px; max-width: 36em; }
+  .stage { height: 100%; display: flex; align-items: center; justify-content: center; }
+  .bar { height: 2px; background: var(--line); margin: 22px 0; position: relative; overflow: hidden; }
+  .bar i { position: absolute; width: 35%; height: 100%; background: var(--ink); animation: slide 1s linear infinite; }
+  @keyframes slide { from { left: -35%; } to { left: 100%; } }
+  .page { height: 100%; padding: 28px 32px; display: flex; flex-direction: column; min-height: 0; }
+  .page h1 { font-size: 22px; font-weight: 560; letter-spacing: -0.03em; margin: 0 0 18px; }
+  .list { border-top: 1px solid var(--line); }
+  .list button, .list .line { display: grid; width: 100%; text-align: left; grid-template-columns: 160px 140px 80px 1fr; gap: 12px; padding: 12px 0; border: 0; border-bottom: 1px solid var(--line); background: transparent; }
+  .kpis { display: flex; gap: 28px; margin-bottom: 22px; }
+  .kpis b { display: block; font-size: 32px; font-weight: 560; letter-spacing: -0.03em; }
+  .kpis span { color: var(--muted); font-size: 12px; }
+  .ask { max-width: 720px; display: flex; flex-direction: column; gap: 12px; }
+  .ask input { border: 0; border-bottom: 1px solid var(--line); padding: 8px 0; background: transparent; outline: none; }
+  pre { margin: 0; font: 12px/1.45 ui-monospace, Consolas, monospace; color: var(--muted); white-space: pre-wrap; }
+  .settings { display: grid; grid-template-columns: 160px 280px; gap: 10px 16px; align-items: center; max-width: 480px; }
+  .settings span { color: var(--muted); }
+  .settings input { border: 0; border-bottom: 1px solid var(--line); padding: 4px 0; background: transparent; }
+  #chrome { height: 34px; flex: none; background: #161616; color: #ddd; display: flex; align-items: center; gap: 6px; padding: 0 8px; font: 11px/1 ui-monospace, Consolas, monospace; }
+  #chrome button { color: #ccc; border: 1px solid #333; background: #222; padding: 3px 7px; border-radius: 3px; }
+  #chrome button.on { color: #fff; border-color: #aaa; }
+  #chrome .sep { width: 1px; height: 14px; background: #333; margin: 0 4px; }
+  #notes { display: none; position: fixed; z-index: 8; top: 42px; right: 10px; width: 280px; background: #fffef8; color: #1c1b19; border: 1px solid #e4e0d8; padding: 10px 12px 12px; font: 12px/1.45 "Segoe UI", system-ui, sans-serif; box-shadow: 0 10px 28px rgba(0,0,0,.12); }
+  #notes b { display: block; margin: 8px 0 2px; }
+  body.show-ann #notes { display: block; }
+  body.no-chrome #chrome, body.no-chrome #notes { display: none; }
+  body { display: flex; flex-direction: column; }
+  body.no-chrome .window { height: 100%; }
+  #app { flex: 1; min-height: 0; }
+</style>
+</head>
+<body>
+<div id="chrome">
+  <span>PROTOTYPE</span>
+  <i class="sep"></i>
+  <button data-act="flow:empty">Empty</button>
+  <button data-act="flow:loaded">Loaded</button>
+  <button data-act="flow:inspecting">Inspecting</button>
+  <button data-act="flow:result">Result</button>
+  <i class="sep"></i>
+  <button data-act="error:none">Clear</button>
+  <button data-act="error:offline">Offline</button>
+  <button data-act="error:pair">Bad pair</button>
+  <button data-act="error:llm">Fallback</button>
+  <button data-act="error:sql">SqlGuard</button>
+  <i class="sep"></i>
+  <button data-act="ann">Notes</button>
+</div>
+<div id="app"></div>
+<aside id="notes">
+  <b>Seen first</b>
+  The board. The disposition is one word beside it.
+  <b>One action</b>
+  The black button. It reads Load images, then Inspect, then Next.
+  <b>Where it goes</b>
+  Load images shows the pair. Inspect runs the pass and lands on SCRAP. Next clears the board.
+  <b>Errors</b>
+  One sentence in the margin. Offline, a size mismatch, template fallback beside an unchanged SCRAP, and a rejected question on Ask.
+</aside>
+<script>
+const DEFECTS = [
+  { cls: "Short", conf: "0.92", ipc: "IPC-A-600 2.2.2", x: 177, y: 101, w: 49, h: 95 },
+  { cls: "Open", conf: "0.82", ipc: "IPC-A-600 2.2.1", x: 378, y: 275, w: 63, h: 47 },
+  { cls: "Open", conf: "0.75", ipc: "IPC-A-600 2.2.1", x: 400, y: 386, w: 43, h: 46 }
+];
+const SQL_OK = "SELECT Id, FileName, BatchId, DefectCount, DefectClassesSummary FROM v_inspections WHERE BoardDisposition = 'SCRAP' ORDER BY InspectedAtUtc DESC LIMIT 50";
+const SQL_BAD = "SELECT * FROM Inspections";
+const SQL_REJECT = "Execution rejected by SqlGuard: Access to table or view 'Inspections' is not allowed. Only allowlisted views (v_inspections, v_defects, v_batches) may be queried.";
+const q = new URLSearchParams(location.search);
+const state = {
+  tab: q.get("tab") || "inspect",
+  flow: q.get("state") || "empty",
+  error: q.get("error") || "",
+  ann: q.get("ann") === "1",
+  batchOn: false,
+  askOn: false,
+  saved: false,
+  defect: 0
+};
+if (state.error === "sql") state.tab = q.get("tab") || "ask";
+if (state.error === "llm") state.flow = "result";
+if ((state.error === "offline" || state.error === "pair") && state.flow === "empty") state.flow = "loaded";
+if (q.get("chrome") === "0") document.body.classList.add("no-chrome");
+if (state.ann) document.body.classList.add("show-ann");
+let pending = 0;
+
+const TABS = [
+  ["inspect", "Single Inspect"],
+  ["batch", "Batch"],
+  ["history", "History"],
+  ["dashboard", "Dashboard"],
+  ["ask", "Ask"],
+  ["settings", "Settings"]
+];
+
+function board(boxes) {
+  const marks = boxes ? DEFECTS.map((d, i) => `
+    <g data-act="defect:${i}">
+      <rect x="${d.x}" y="${d.y}" width="${d.w}" height="${d.h}" fill="none" stroke="${state.defect === i ? "#8d2f2f" : "#8d2f2f"}" stroke-width="${state.defect === i ? 3 : 1.5}"/>
+      <text x="${d.x + 4}" y="${d.y - 4}" fill="#8d2f2f" font-size="11" font-family="Segoe UI, sans-serif">${d.cls}</text>
+    </g>`).join("") : "";
+  return `<svg viewBox="150 70 320 390" preserveAspectRatio="xMidYMid meet">
+    <rect x="160" y="80" width="300" height="370" rx="8" fill="#d5e0cf"/>
+    <g fill="none" stroke="#8a6232" stroke-width="2">
+      <path d="M190 90 V200 M210 90 V200 M190 140 H214"/>
+      <path d="M400 100 V286 M400 318 V440"/>
+      <path d="M250 200 H360 V300"/>
+    </g>
+    <rect x="248" y="168" width="64" height="36" rx="2" fill="#243028"/>
+    ${marks}
+  </svg>`;
+}
+
+function footer() {
+  const offline = state.error === "offline";
+  const llm = state.error === "llm";
+  return `<footer>
+    <span class="${offline ? "bad" : ""}">${offline ? "Backend offline" : "Backend online"}</span>
+    <span>BATCH-FIXTURE</span>
+    <span>Class 2</span>
+    <span>${state.flow === "result" ? "86.3 ms" : ""}</span>
+    <span>${llm ? "Template fallback" : ""}</span>
+  </footer>`;
+}
+
+function shell(inner) {
+  const nav = TABS.map(([id, label]) => `<button data-act="tab:${id}" class="${state.tab === id ? "on" : ""}">${label}</button>`).join("");
+  return `<div class="window">
+    <div class="titlebar"><span>PCB Inspection Viewer</span><span class="dots"><i></i><i></i><i></i></span></div>
+    <nav>${nav}</nav>
+    <div class="body">${inner}</div>
+    ${footer()}
+  </div>`;
+}
+
+function primaryLabel() {
+  if (state.error === "offline") return "Retry";
+  if (state.error === "pair") return "Inspect";
+  if (state.flow === "empty") return "Load images";
+  if (state.flow === "loaded") return "Inspect";
+  if (state.flow === "inspecting") return "Cancel";
+  return "Next";
+}
+
+function sideError() {
+  if (state.error === "offline") return `<p class="err">Inspection API error (503): Backend request failed after 3 attempts.</p>`;
+  if (state.error === "pair") return `<p class="err">Inspection API error (400): template and test images differ in size.</p>`;
+  if (state.error === "llm") return `<p class="err">Template fallback. SCRAP is unchanged.</p>`;
+  return "";
+}
+
+function inspectBody() {
+  if (state.flow === "empty" && !state.error) {
+    return `<div class="stage"><button class="primary" data-act="primary">Load images</button></div>`;
+  }
+  const showBoxes = state.flow === "result" || state.error === "llm";
+  const rows = showBoxes ? DEFECTS.map((d, i) => `
+    <button class="row ${state.defect === i ? "on" : ""}" data-act="defect:${i}">
+      <span><b>${d.cls}</b> <span class="num">${d.conf}</span></span><span>${d.ipc}</span>
+    </button>`).join("") : "";
+  let head = "";
+  if (state.error === "offline" || state.error === "pair") head = sideError();
+  else if (state.flow === "result" || state.error === "llm") head = `<div class="verdict">SCRAP</div>${rows}${sideError()}`;
+  else if (state.flow === "inspecting") head = `<div class="bar"><i></i></div>`;
+  else head = `<div class="files">20085000_temp.png<br>20085000_test.png</div><div class="quiet">BATCH-FIXTURE · Class 2</div>`;
+  return `<div class="split">
+    <div class="canvas">${board(showBoxes)}</div>
+    <aside class="side">${head}<div class="grow"></div><button class="primary" data-act="primary">${primaryLabel()}</button></aside>
+  </div>`;
+}
+
+function batchBody() {
+  const rows = state.batchOn ? `<div class="list"><div class="line"><span>20085000_test.png</span><span>BATCH-FIXTURE</span><b style="color:#8d2f2f">SCRAP</b><span>3</span></div></div>` : "";
+  return `<div class="page"><div class="quiet">BATCH-FIXTURE</div>${rows}<div class="grow"></div><button class="primary" data-act="primary">${state.batchOn ? "Open" : "Start"}</button></div>`;
+}
+
+function historyBody() {
+  return `<div class="page">
+    <div class="list"><div class="line"><span>20085000_test.png</span><span>BATCH-FIXTURE</span><b style="color:#8d2f2f">SCRAP</b><span>Short, Open</span></div></div>
+    <div class="grow"></div>
+    <button class="primary" data-act="primary">Open</button>
+  </div>`;
+}
+
+function dashBody() {
+  return `<div class="page">
+    <div class="kpis">
+      <div><b>1</b><span>Inspected</span></div>
+      <div><b>0</b><span>Pass</span></div>
+      <div><b>0</b><span>Rework</span></div>
+      <div><b style="color:#8d2f2f">1</b><span>Scrap</span></div>
+      <div><b>0%</b><span>Yield</span></div>
+    </div>
+    <div class="list">
+      <div class="line"><span>Open</span><span>2</span><span>66.7%</span><span></span></div>
+      <div class="line"><span>Short</span><span>1</span><span>33.3%</span><span></span></div>
+    </div>
+    <div class="grow"></div>
+    <button class="primary" data-act="primary">Refresh</button>
+  </div>`;
+}
+
+function askBody() {
+  const bad = state.error === "sql";
+  const show = bad || state.askOn;
+  const sql = bad ? SQL_BAD : SQL_OK;
+  const question = bad ? "read the Inspections table" : "scrap boards";
+  const extra = bad ? `<p class="err">${SQL_REJECT}</p>` : (state.askOn ? `<div class="line" style="display:block;padding:8px 0">20085000_test.png · SCRAP · 3 · Short, Open</div>` : "");
+  return `<div class="page"><div class="ask">
+    <input value="${question}" aria-label="Question">
+    ${show ? `<pre>${sql}</pre>${extra}` : ""}
+    <button class="primary" data-act="primary">${bad ? "Run" : "Ask"}</button>
+  </div></div>`;
+}
+
+function settingsBody() {
+  const rows = [
+    ["API base URL", "http://localhost:8000"],
+    ["Timeout seconds", "10"],
+    ["Concurrency", "2"],
+    ["IPC class", "Class 2"],
+    ["Batch id", "BATCH-UPLOAD"],
+    ["LLM provider", "None"],
+    ["Model", "gemini-2.5-flash"],
+    ["Language", "en"]
+  ].map(([k, v]) => `<span>${k}</span><input value="${v}" aria-label="${k}">`).join("");
+  return `<div class="page"><div class="settings">${rows}</div><div class="grow"></div>
+    <button class="primary" data-act="primary">${state.saved ? "Saved" : "Save"}</button></div>`;
+}
+
+function render() {
+  const body = {
+    inspect: inspectBody, batch: batchBody, history: historyBody,
+    dashboard: dashBody, ask: askBody, settings: settingsBody
+  }[state.tab]();
+  document.getElementById("app").innerHTML = shell(body);
+  document.querySelectorAll("#chrome [data-act^='flow:']").forEach(b => {
+    b.classList.toggle("on", !state.error && b.dataset.act === "flow:" + state.flow);
+  });
+  document.querySelectorAll("#chrome [data-act^='error:']").forEach(b => {
+    b.classList.toggle("on", b.dataset.act === "error:" + (state.error || "none"));
+  });
+}
+
+function onPrimary() {
+  clearTimeout(pending);
+  if (state.tab === "inspect") {
+    if (state.error === "offline" || state.error === "pair") return;
+    if (state.error === "llm") { state.error = ""; state.flow = "empty"; render(); return; }
+    if (state.flow === "empty") state.flow = "loaded";
+    else if (state.flow === "loaded") {
+      state.flow = "inspecting";
+      render();
+      pending = setTimeout(() => { state.flow = "result"; render(); }, 800);
+      return;
+    } else if (state.flow === "inspecting") state.flow = "loaded";
+    else { state.flow = "empty"; state.error = ""; }
+    render();
+    return;
+  }
+  if (state.tab === "batch") {
+    if (!state.batchOn) state.batchOn = true;
+    else { state.tab = "inspect"; state.flow = "result"; state.error = ""; }
+  } else if (state.tab === "history") {
+    state.tab = "inspect"; state.flow = "result"; state.error = "";
+  } else if (state.tab === "ask") {
+    if (state.error === "sql") return;
+    state.askOn = true;
+  } else if (state.tab === "settings") state.saved = true;
+  render();
+}
+
+document.body.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-act]");
+  if (!el) return;
+  const act = el.dataset.act;
+  if (act === "ann") {
+    state.ann = !state.ann;
+    document.body.classList.toggle("show-ann", state.ann);
+    return;
+  }
+  if (act === "primary") { onPrimary(); return; }
+  if (act.startsWith("tab:")) { state.tab = act.slice(4); if (state.tab !== "ask") state.error = state.error === "sql" ? "" : state.error; render(); return; }
+  if (act.startsWith("defect:")) { state.defect = Number(act.slice(7)); render(); return; }
+  if (act.startsWith("flow:")) {
+    clearTimeout(pending);
+    state.flow = act.slice(5);
+    state.error = "";
+    state.tab = "inspect";
+    render();
+    return;
+  }
+  if (act.startsWith("error:")) {
+    clearTimeout(pending);
+    const err = act.slice(6);
+    state.error = err === "none" ? "" : err;
+    if (state.error === "sql") state.tab = "ask";
+    else state.tab = "inspect";
+    if (state.error === "llm") state.flow = "result";
+    if (state.error === "offline" || state.error === "pair") state.flow = "loaded";
+    render();
+  }
+});
+
+render();
+</script>
+</body>
+</html>

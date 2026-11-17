@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Control room — PCB Inspection Viewer</title>
+<style>
+  :root {
+    --bg: #07090b;
+    --panel: #101418;
+    --ink: #e8eef2;
+    --muted: #8b98a3;
+    --line: #24303a;
+    --amber: #f5a524;
+    --scrap: #ff3b30;
+    --ok: #3dd68c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 13px/1.35 ui-monospace, Consolas, monospace; overflow: hidden; }
+  button, input { font: inherit; color: inherit; }
+  button { background: none; border: 0; cursor: pointer; padding: 0; }
+  body { display: flex; flex-direction: column; }
+  #app { flex: 1; min-height: 0; }
+  .window { height: 100%; display: flex; flex-direction: column; background: var(--bg); }
+  .lamps { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #0c1014; border-bottom: 1px solid var(--line); }
+  .lamp { border: 1px solid var(--line); padding: 4px 8px; letter-spacing: 0.06em; color: var(--muted); }
+  .lamp.ok { color: #04140c; background: var(--ok); border-color: var(--ok); font-weight: 700; }
+  .lamp.bad { color: #1a0000; background: var(--scrap); border-color: var(--scrap); font-weight: 700; }
+  .lamp.amber { color: #1a1204; background: var(--amber); border-color: var(--amber); font-weight: 700; }
+  nav { display: flex; gap: 0; border-bottom: 1px solid var(--line); }
+  nav button { padding: 8px 14px; color: var(--muted); letter-spacing: 0.08em; }
+  nav button.on { color: var(--amber); box-shadow: inset 0 -2px 0 var(--amber); }
+  .body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .alarm { background: var(--scrap); color: #1a0000; font-weight: 800; letter-spacing: 0.08em; padding: 8px 12px; }
+  .split { flex: 1; min-height: 0; display: flex; }
+  .bezel { flex: 1; min-width: 0; margin: 12px; background: #050807; border: 1px solid #2a3a32; display: flex; flex-direction: column; position: relative; }
+  .bezel svg { flex: 1; min-height: 0; width: 100%; }
+  .run { position: absolute; left: 12px; bottom: 12px; width: 84px; height: 64px; border: 2px solid var(--amber); color: var(--amber); background: #140f06; letter-spacing: 0.14em; font-weight: 800; }
+  .run:hover { background: var(--amber); color: #140f06; }
+  .rack { width: 340px; border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; }
+  .verdict { font-size: 56px; line-height: 1; letter-spacing: -0.04em; font-weight: 800; color: var(--scrap); padding: 18px 16px 8px; }
+  .slot { display: grid; grid-template-columns: 28px 1fr auto auto; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); text-align: left; width: 100%; }
+  .slot.on { background: #1a140c; }
+  .slot b { color: var(--amber); }
+  .page { flex: 1; min-height: 0; padding: 16px 18px; display: flex; flex-direction: column; }
+  .line { display: grid; grid-template-columns: 220px 160px 100px 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .kpis { display: flex; gap: 18px; margin-bottom: 16px; }
+  .kpis div { border: 1px solid var(--line); padding: 10px 14px; min-width: 90px; }
+  .kpis b { display: block; font-size: 28px; color: var(--amber); }
+  .kpis .scrap b { color: var(--scrap); }
+  pre { margin: 8px 0; color: var(--amber); white-space: pre-wrap; font: 12px/1.45 ui-monospace, Consolas, monospace; }
+  .ask input, .settings input { background: transparent; border: 0; border-bottom: 1px solid var(--line); padding: 6px 0; outline: none; width: 100%; max-width: 640px; }
+  .settings { display: grid; grid-template-columns: 180px 320px; gap: 8px 12px; align-items: center; }
+  .settings span { color: var(--muted); }
+  .scan { position: absolute; left: 0; right: 0; height: 2px; background: rgba(61,214,140,.8); animation: scan 1.1s linear infinite; }
+  @keyframes scan { from { top: 0; } to { top: 100%; } }
+  #chrome { height: 34px; flex: none; background: #000; color: #ccc; display: flex; align-items: center; gap: 6px; padding: 0 8px; font: 11px/1 ui-monospace, Consolas, monospace; border-bottom: 1px solid #333; }
+  #chrome button { color: #ccc; border: 1px solid #333; background: #111; padding: 3px 7px; }
+  #chrome button.on { color: var(--amber); border-color: var(--amber); }
+  #chrome .sep { width: 1px; height: 14px; background: #333; margin: 0 4px; }
+  #notes { display: none; position: fixed; z-index: 8; top: 42px; right: 10px; width: 280px; background: #fffef8; color: #1c1b19; border: 1px solid #e4e0d8; padding: 10px 12px 12px; font: 12px/1.45 "Segoe UI", system-ui, sans-serif; }
+  #notes b { display: block; margin: 8px 0 2px; }
+  body.show-ann #notes { display: block; }
+  body.no-chrome #chrome, body.no-chrome #notes { display: none; }
+</style>
+</head>
+<body>
+<div id="chrome">
+  <span>PROTOTYPE</span><i class="sep"></i>
+  <button data-act="flow:empty">Empty</button>
+  <button data-act="flow:loaded">Loaded</button>
+  <button data-act="flow:inspecting">Inspecting</button>
+  <button data-act="flow:result">Result</button>
+  <i class="sep"></i>
+  <button data-act="error:none">Clear</button>
+  <button data-act="error:offline">Offline</button>
+  <button data-act="error:pair">Bad pair</button>
+  <button data-act="error:llm">Fallback</button>
+  <button data-act="error:sql">SqlGuard</button>
+  <i class="sep"></i>
+  <button data-act="ann">Notes</button>
+</div>
+<div id="app"></div>
+<aside id="notes">
+  <b>Seen first</b>
+  The status lamps, then the board monitor, then SCRAP.
+  <b>One action</b>
+  The RUN key. On a finished board it becomes NEXT.
+  <b>Where it goes</b>
+  RUN inspects and shows SCRAP. NEXT clears the monitor.
+  <b>Errors</b>
+  A full-width alarm. Offline turns the lamp red. A mismatched pair stops the pass. Template fallback is a lamp, and SCRAP stays. Ask prints the SqlGuard rejection in the console.
+</aside>
+<script>
+const DEFECTS = [
+  { cls: "SHORT", conf: "0.92", ipc: "2.2.2", x: 177, y: 101, w: 49, h: 95 },
+  { cls: "OPEN", conf: "0.82", ipc: "2.2.1", x: 378, y: 275, w: 63, h: 47 },
+  { cls: "OPEN", conf: "0.75", ipc: "2.2.1", x: 400, y: 386, w: 43, h: 46 }
+];
+const SQL_OK = "SELECT Id, FileName, BatchId, DefectCount, DefectClassesSummary FROM v_inspections WHERE BoardDisposition = 'SCRAP' ORDER BY InspectedAtUtc DESC LIMIT 50";
+const SQL_BAD = "SELECT * FROM Inspections";
+const SQL_REJECT = "Execution rejected by SqlGuard: Access to table or view 'Inspections' is not allowed. Only allowlisted views (v_inspections, v_defects, v_batches) may be queried.";
+const q = new URLSearchParams(location.search);
+const state = { tab: q.get("tab") || "inspect", flow: q.get("state") || "empty", error: q.get("error") || "", ann: q.get("ann") === "1", batchOn: false, askOn: false, saved: false, defect: 0 };
+if (state.error === "sql") state.tab = q.get("tab") || "ask";
+if (state.error === "llm") state.flow = "result";
+if ((state.error === "offline" || state.error === "pair") && state.flow === "empty") state.flow = "loaded";
+if (q.get("chrome") === "0") document.body.classList.add("no-chrome");
+if (state.ann) document.body.classList.add("show-ann");
+let pending = 0;
+const TABS = [["inspect","F1 INSPECT"],["batch","F2 BATCH"],["history","F3 HISTORY"],["dashboard","F4 DASHBOARD"],["ask","ASK"],["settings","F7 SETTINGS"]];
+
+function board(boxes) {
+  const marks = boxes ? DEFECTS.map((d, i) => `<g data-act="defect:${i}"><rect x="${d.x}" y="${d.y}" width="${d.w}" height="${d.h}" fill="none" stroke="#ff3b30" stroke-width="${state.defect===i?3:1.5}"/><text x="${d.x+3}" y="${d.y+12}" fill="#ff3b30" font-size="11" font-family="ui-monospace,monospace">${i}</text></g>`).join("") : "";
+  return `<svg viewBox="150 70 320 390" preserveAspectRatio="xMidYMid meet">
+    <rect x="160" y="80" width="300" height="370" rx="4" fill="#0c2a22"/>
+    <g fill="none" stroke="#e0b15a" stroke-width="2" opacity="0.9">
+      <path d="M190 90 V200 M210 90 V200 M190 140 H214"/>
+      <path d="M400 100 V286 M400 318 V440"/>
+      <path d="M250 200 H360 V300"/>
+    </g>
+    <rect x="248" y="168" width="64" height="36" fill="#07140f" stroke="#e0b15a"/>
+    ${marks}
+  </svg>`;
+}
+
+function lamps() {
+  const offline = state.error === "offline";
+  const llm = state.error === "llm";
+  return `<div class="lamps">
+    <span class="lamp ${offline ? "bad" : "ok"}">${offline ? "OFFLINE" : "ONLINE"}</span>
+    <span class="lamp">BATCH-FIXTURE</span>
+    <span class="lamp">CLASS 2</span>
+    <span class="lamp">${state.flow === "result" ? "86.3 ms" : "NO PASS"}</span>
+    ${llm ? `<span class="lamp amber">TEMPLATE FALLBACK</span>` : `<span class="lamp">LLM NONE</span>`}
+  </div>`;
+}
+
+function keyLabel() {
+  if (state.error === "offline") return "RETRY";
+  if (state.error === "pair") return "RUN";
+  if (state.flow === "empty") return "LOAD";
+  if (state.flow === "loaded") return "RUN";
+  if (state.flow === "inspecting") return "STOP";
+  return "NEXT";
+}
+
+function alarm() {
+  if (state.error === "offline") return `<div class="alarm">BACKEND OFFLINE — REQUEST FAILED AFTER 3 ATTEMPTS</div>`;
+  if (state.error === "pair") return `<div class="alarm">IMAGE PAIR REJECTED — TEMPLATE AND TEST DIFFER IN SIZE</div>`;
+  return "";
+}
+
+function shell(inner) {
+  const nav = TABS.map(([id, label]) => `<button data-act="tab:${id}" class="${state.tab===id?"on":""}">${label}</button>`).join("");
+  return `<div class="window">${lamps()}<nav>${nav}</nav><div class="body">${alarm()}${inner}</div></div>`;
+}
+
+function inspectBody() {
+  const show = state.flow === "result" || state.error === "llm";
+  const scanning = state.flow === "inspecting" ? `<div class="scan"></div>` : "";
+  let rack = `<div class="verdict" style="color:#8b98a3">—</div>`;
+  if (state.flow === "loaded" || state.error === "pair" || state.error === "offline") {
+    rack = `<div style="padding:18px 16px;color:#8b98a3">20085000_temp.png<br>20085000_test.png</div>`;
+  }
+  if (show) {
+    const slots = DEFECTS.map((d, i) => `<button class="slot ${state.defect===i?"on":""}" data-act="defect:${i}"><span>${i}</span><b>${d.cls}</b><span>${d.conf}</span><span>${d.ipc}</span></button>`).join("");
+    rack = `<div class="verdict">SCRAP</div><div style="padding:0 16px 8px;color:#f5a524">IPC-A-600</div>${slots}`;
+  }
+  if (state.flow === "empty" && !state.error) {
+    return `<div class="split"><div class="bezel" style="align-items:center;justify-content:center;color:#8b98a3">NO BOARD<button class="run" data-act="primary">LOAD</button></div><div class="rack"><div class="verdict" style="color:#8b98a3">—</div></div></div>`;
+  }
+  return `<div class="split"><div class="bezel">${scanning}${board(show)}<button class="run" data-act="primary">${keyLabel()}</button></div><div class="rack">${rack}</div></div>`;
+}
+
+function batchBody() {
+  const row = state.batchOn ? `<div class="line"><span>20085000_test.png</span><span>BATCH-FIXTURE</span><b style="color:#ff3b30">SCRAP</b><span>3</span></div>` : `<div style="color:#8b98a3">FOLDER BATCH-FIXTURE</div>`;
+  return `<div class="page">${row}<div style="flex:1"></div><button class="run" style="position:static;width:120px" data-act="primary">${state.batchOn?"OPEN":"START"}</button></div>`;
+}
+
+function historyBody() {
+  return `<div class="page"><div class="line"><span>20085000_test.png</span><span>BATCH-FIXTURE</span><b style="color:#ff3b30">SCRAP</b><span>SHORT, OPEN</span></div><div style="flex:1"></div><button class="run" style="position:static;width:120px" data-act="primary">OPEN</button></div>`;
+}
+
+function dashBody() {
+  return `<div class="page"><div class="kpis">
+    <div><b>1</b>INSP</div><div><b>0</b>PASS</div><div><b>0</b>REWORK</div><div class="scrap"><b>1</b>SCRAP</div><div><b>0%</b>YIELD</div>
+  </div>
+  <div class="line"><span>OPEN</span><span>2</span><span>66.7%</span><span></span></div>
+  <div class="line"><span>SHORT</span><span>1</span><span>33.3%</span><span></span></div>
+  <div style="flex:1"></div>
+  <button class="run" style="position:static;width:140px" data-act="primary">REFRESH</button></div>`;
+}
+
+function askBody() {
+  const bad = state.error === "sql";
+  const show = bad || state.askOn;
+  return `<div class="page">
+    <input value="${bad ? "read the Inspections table" : "scrap boards"}" aria-label="Question">
+    ${show ? `<pre>${bad ? SQL_BAD : SQL_OK}</pre>` : ""}
+    ${bad ? `<div class="alarm" style="margin-top:8px">${SQL_REJECT}</div>` : (state.askOn ? `<div class="line"><span>20085000_test.png</span><span>SCRAP</span><span>3</span><span>Short, Open</span></div>` : "")}
+    <div style="flex:1"></div>
+    <button class="run" style="position:static;width:120px" data-act="primary">${bad ? "RUN" : "ASK"}</button>
+  </div>`;
+}
+
+function settingsBody() {
+  const rows = [["API","http://localhost:8000"],["TIMEOUT","10"],["CONCURRENCY","2"],["IPC","Class 2"],["BATCH","BATCH-UPLOAD"],["LLM","None"],["MODEL","gemini-2.5-flash"],["LANG","en"]]
+    .map(([k,v]) => `<span>${k}</span><input value="${v}" aria-label="${k}">`).join("");
+  return `<div class="page"><div class="settings">${rows}</div><div style="flex:1"></div><button class="run" style="position:static;width:120px" data-act="primary">${state.saved?"SAVED":"SAVE"}</button></div>`;
+}
+
+function render() {
+  const map = { inspect: inspectBody, batch: batchBody, history: historyBody, dashboard: dashBody, ask: askBody, settings: settingsBody };
+  document.getElementById("app").innerHTML = shell(map[state.tab]());
+  document.querySelectorAll("#chrome [data-act^='flow:']").forEach(b => b.classList.toggle("on", !state.error && b.dataset.act === "flow:" + state.flow));
+  document.querySelectorAll("#chrome [data-act^='error:']").forEach(b => b.classList.toggle("on", b.dataset.act === "error:" + (state.error || "none")));
+}
+
+function onPrimary() {
+  clearTimeout(pending);
+  if (state.tab === "inspect") {
+    if (state.error === "offline" || state.error === "pair") return;
+    if (state.error === "llm") { state.error = ""; state.flow = "empty"; render(); return; }
+    if (state.flow === "empty") state.flow = "loaded";
+    else if (state.flow === "loaded") {
+      state.flow = "inspecting"; render();
+      pending = setTimeout(() => { state.flow = "result"; render(); }, 800);
+      return;
+    } else if (state.flow === "inspecting") state.flow = "loaded";
+    else { state.flow = "empty"; state.error = ""; }
+    render(); return;
+  }
+  if (state.tab === "batch") {
+    if (!state.batchOn) state.batchOn = true;
+    else { state.tab = "inspect"; state.flow = "result"; state.error = ""; }
+  } else if (state.tab === "history") { state.tab = "inspect"; state.flow = "result"; state.error = ""; }
+  else if (state.tab === "ask") { if (state.error === "sql") return; state.askOn = true; }
+  else if (state.tab === "settings") state.saved = true;
+  render();
+}
+
+document.body.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-act]");
+  if (!el) return;
+  const act = el.dataset.act;
+  if (act === "ann") { state.ann = !state.ann; document.body.classList.toggle("show-ann", state.ann); return; }
+  if (act === "primary") return onPrimary();
+  if (act.startsWith("tab:")) { state.tab = act.slice(4); render(); return; }
+  if (act.startsWith("defect:")) { state.defect = Number(act.slice(7)); render(); return; }
+  if (act.startsWith("flow:")) { clearTimeout(pending); state.flow = act.slice(5); state.error = ""; state.tab = "inspect"; render(); return; }
+  if (act.startsWith("error:")) {
+    clearTimeout(pending);
+    const err = act.slice(6);
+    state.error = err === "none" ? "" : err;
+    state.tab = state.error === "sql" ? "ask" : "inspect";
+    if (state.error === "llm") state.flow = "result";
+    if (state.error === "offline" || state.error === "pair") state.flow = "loaded";
+    render();
+  }
+});
+render();
+</script>
+</body>
+</html>
