@@ -55,18 +55,23 @@ internal static class CaptureFixtureHost
             throw new InvalidOperationException($"Fixture '{fixturePath}' did not contain an inspection result.");
         }
 
+        string state = "result";
+        if (TryGetOption(args, "--capture-state", out string requestedState))
+        {
+            state = requestedState;
+        }
+
+        int? selectedDefect = null;
+        if (TryGetOption(args, "--select-defect", out string defectText) &&
+            int.TryParse(defectText, out int defectIndex))
+        {
+            selectedDefect = defectIndex;
+        }
+
         await window.Dispatcher.InvokeAsync(() =>
         {
-            inspect.ShowRecordedResult(
-                new UploadTriageEnvelope(dto, RoundTripMs: 0),
-                dto.BatchId,
-                dto.IpcClass);
-            shell.SelectedTabIndex = 0;
+            ApplyCaptureState(shell, inspect, dto, state, selectedDefect, HasFlag(args, "--cycle-layers"));
             window.UpdateLayout();
-            if (HasFlag(args, "--cycle-layers"))
-            {
-                StartLayerCycle(inspect);
-            }
         });
         await window.Dispatcher.InvokeAsync(static () => { }, DispatcherPriority.ApplicationIdle);
 
@@ -81,6 +86,75 @@ internal static class CaptureFixtureHost
             await File.WriteAllTextAsync(readyFile, DateTime.UtcNow.ToString("o"), cancellationToken)
                 .ConfigureAwait(false);
         }
+    }
+
+    private static void ApplyCaptureState(
+        MainShellViewModel shell,
+        InspectViewModel inspect,
+        UploadTriageResponseDto dto,
+        string state,
+        int? selectedDefect,
+        bool cycleLayers)
+    {
+        string normalized = state.Trim().ToLowerInvariant();
+        if (normalized == "offline")
+        {
+            shell.IsBackendOnline = false;
+            shell.BackendStatusText = "Backend offline";
+            inspect.IsBackendOffline = true;
+            shell.SelectedTabIndex = 0;
+            shell.RefreshAlarm();
+            return;
+        }
+
+        shell.IsBackendOnline = true;
+        shell.BackendStatusText = "Backend online";
+        inspect.IsBackendOffline = false;
+
+        var envelope = new UploadTriageEnvelope(dto, RoundTripMs: 0);
+        switch (normalized)
+        {
+            case "pair":
+                inspect.ShowMismatchedPair(
+                    dto,
+                    "Inspection API error (400): template and test images differ in size.");
+                shell.SelectedTabIndex = 0;
+                break;
+            case "fallback":
+                inspect.UseLlmProvider("Gemini");
+                inspect.ShowRecordedResult(envelope, dto.BatchId, dto.IpcClass);
+                shell.SelectedTabIndex = 0;
+                break;
+            case "sql":
+                shell.SelectedTabIndex = 4;
+                if (shell.Ask is not null)
+                {
+                    shell.Ask.StatusMessage =
+                        "Execution rejected by SqlGuard: Access to table or view 'Inspections' is not allowed. Only allowlisted views (v_inspections, v_defects, v_batches) may be queried.";
+                }
+                break;
+            case "halted":
+                inspect.ShowRecordedResult(envelope, dto.BatchId, dto.IpcClass);
+                inspect.IsLineHalted = true;
+                shell.SelectedTabIndex = 0;
+                break;
+            default:
+                inspect.ShowRecordedResult(envelope, dto.BatchId, dto.IpcClass);
+                shell.SelectedTabIndex = 0;
+                if (selectedDefect is int index)
+                {
+                    inspect.SelectDefectCommand.Execute(index);
+                }
+
+                if (cycleLayers)
+                {
+                    StartLayerCycle(inspect);
+                }
+
+                break;
+        }
+
+        shell.RefreshAlarm();
     }
 
     private static void StartLayerCycle(InspectViewModel inspect)

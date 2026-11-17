@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PcbInspectionViewer.Core.Api;
@@ -24,6 +25,7 @@ public sealed partial class InspectViewModel : ObservableObject, IDisposable
     private readonly IImageCache? _imageCache;
     private CancellationTokenSource? _inspectCts;
     private string? _baseUrlOverride;
+    private string _llmProvider = "None";
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(InspectCommand))]
@@ -82,6 +84,15 @@ public sealed partial class InspectViewModel : ObservableObject, IDisposable
     private bool _showBoundingBoxes = true;
 
     [ObservableProperty]
+    private bool _isBackendOffline = true;
+
+    [ObservableProperty]
+    private bool _usedTemplateFallback;
+
+    [ObservableProperty]
+    private int? _selectedDefectIndex;
+
+    [ObservableProperty]
     private double _zoomFactor = 1.0;
 
     [ObservableProperty]
@@ -108,6 +119,98 @@ public sealed partial class InspectViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<string> AllowedIpcClasses => BatchOptions.AllowedIpcClasses;
 
+    public bool HasBothImagePaths =>
+        !string.IsNullOrWhiteSpace(TemplateImagePath) &&
+        (CleanBoardMode || !string.IsNullOrWhiteSpace(TestImagePath));
+
+    public bool ShowWorkspace => HasBothImagePaths || HasResult || IsBusy || HasError;
+
+    public bool ShowFileNames => HasBothImagePaths && !HasResult;
+
+    public string TemplateFileName =>
+        string.IsNullOrWhiteSpace(TemplateImagePath) ? string.Empty : Path.GetFileName(TemplateImagePath);
+
+    public string TestFileName =>
+        string.IsNullOrWhiteSpace(TestImagePath) ? string.Empty : Path.GetFileName(TestImagePath);
+
+    public string PrimaryActionLabel
+    {
+        get
+        {
+            if (IsBusy)
+            {
+                return "Cancel";
+            }
+
+            if (IsBackendOffline)
+            {
+                return "Retry";
+            }
+
+            if (HasResult && !HasError)
+            {
+                return "Next";
+            }
+
+            if (!HasBothImagePaths)
+            {
+                return "Load images";
+            }
+
+            return "Inspect";
+        }
+    }
+
+    public AlignedDefectDecision? SelectedDefect =>
+        SelectedDefectIndex is int index && index >= 0 && index < AlignedDefects.Count
+            ? AlignedDefects[index]
+            : null;
+
+    public bool ShowDefectDetail => SelectedDefect is not null;
+
+    public string SelectedDefectText
+    {
+        get
+        {
+            if (SelectedDefect?.Detection is not { } detection)
+            {
+                return string.Empty;
+            }
+
+            InspectionDecisionDto? decision = SelectedDefect.Decision;
+            string bbox = string.Create(
+                CultureInfo.InvariantCulture,
+                $"{detection.X1},{detection.Y1}–{detection.X2},{detection.Y2}");
+            string confidence = detection.Confidence.ToString("0.00", CultureInfo.InvariantCulture);
+            var lines = new List<string>
+            {
+                $"{decision?.Severity} · {confidence}",
+                $"{bbox} · {detection.ComputedAreaPx} px"
+            };
+            if (!string.IsNullOrWhiteSpace(decision?.IpcStandardClause))
+            {
+                lines.Add(decision.IpcStandardClause);
+            }
+
+            if (!string.IsNullOrWhiteSpace(decision?.ElectricalFailureRisk))
+            {
+                lines.Add(decision.ElectricalFailureRisk);
+            }
+
+            if (!string.IsNullOrWhiteSpace(decision?.RootCauseHypothesis))
+            {
+                lines.Add(decision.RootCauseHypothesis);
+            }
+
+            if (!string.IsNullOrWhiteSpace(decision?.RecommendedCorrectiveAction))
+            {
+                lines.Add(decision.RecommendedCorrectiveAction);
+            }
+
+            return string.Join("\n\n", lines);
+        }
+    }
+
     public InspectViewModel(
         IInspectionApiClient apiClient,
         ISettingsService settingsService,
@@ -122,10 +225,21 @@ public sealed partial class InspectViewModel : ObservableObject, IDisposable
 
     partial void OnTemplateImagePathChanged(string value)
     {
+        ClearInspectErrorOnNewPath();
         if (CleanBoardMode && !string.IsNullOrWhiteSpace(value))
         {
             TestImagePath = value;
         }
+
+        RefreshLocalPreview();
+        NotifyChrome();
+    }
+
+    partial void OnTestImagePathChanged(string value)
+    {
+        ClearInspectErrorOnNewPath();
+        RefreshLocalPreview();
+        NotifyChrome();
     }
 
     partial void OnCleanBoardModeChanged(bool value)
@@ -134,6 +248,23 @@ public sealed partial class InspectViewModel : ObservableObject, IDisposable
         {
             TestImagePath = TemplateImagePath;
         }
+
+        NotifyChrome();
+    }
+
+    partial void OnIsBusyChanged(bool value) => NotifyChrome();
+
+    partial void OnHasResultChanged(bool value) => NotifyChrome();
+
+    partial void OnHasErrorChanged(bool value) => NotifyChrome();
+
+    partial void OnIsBackendOfflineChanged(bool value) => NotifyChrome();
+
+    partial void OnSelectedDefectIndexChanged(int? value)
+    {
+        OnPropertyChanged(nameof(SelectedDefect));
+        OnPropertyChanged(nameof(SelectedDefectText));
+        OnPropertyChanged(nameof(ShowDefectDetail));
     }
 
     public static bool IsSupportedImageFile(string? pathOrFileName)
@@ -184,7 +315,11 @@ public sealed partial class InspectViewModel : ObservableObject, IDisposable
 
         IpcClass = settings.Batch.DefaultIpcClass;
         ColorizePcb = settings.Batch.ColorizePcb;
+        UseLlmProvider(settings.Llm.Provider);
     }
+
+    public void UseLlmProvider(string? provider) =>
+        _llmProvider = string.IsNullOrWhiteSpace(provider) ? "None" : provider;
 
     public async Task InitializeFromSettingsAsync(CancellationToken cancellationToken = default)
     {
@@ -263,13 +398,11 @@ public sealed partial class InspectViewModel : ObservableObject, IDisposable
         }
         catch (InspectionApiException ex)
         {
-            HasError = true;
-            StatusOrErrorMessage = $"Inspection API error ({(int)ex.StatusCode}): {ex.Message}";
+            FailInspect($"Inspection API error ({(int)ex.StatusCode}): {ex.Message}");
         }
         catch (Exception ex)
         {
-            HasError = true;
-            StatusOrErrorMessage = $"Inspection error: {ex.Message}";
+            FailInspect($"Inspection error: {ex.Message}");
         }
         finally
         {
@@ -377,6 +510,8 @@ public sealed partial class InspectViewModel : ObservableObject, IDisposable
             AlignedDefects.Add(aligned);
         }
 
+        SelectedDefectIndex = null;
+        UsedTemplateFallback = false;
         HasResult = true;
         HasError = false;
         StatusOrErrorMessage = $"Loaded offline result for {entity.FileName} (#{entity.Id}) from local database.";
@@ -437,6 +572,137 @@ public sealed partial class InspectViewModel : ObservableObject, IDisposable
         {
             AlignedDefects.Add(aligned);
         }
+
+        SelectedDefectIndex = null;
+        UsedTemplateFallback = InspectAlarm.ShouldShowTemplateFallback(
+            _llmProvider,
+            InspectAlarm.TraceUsedFallback(dto.Trace));
+    }
+
+    public void ShowMismatchedPair(UploadTriageResponseDto dto, string message)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+
+        TemplateImagePath = "20085000_temp.png";
+        TestImagePath = "20085000_test.png";
+        TemplateImageB64 = dto.TemplateB64;
+        TestImageB64 = dto.TestB64;
+        DiffImageB64 = null;
+        ActiveImageLayer = "Test";
+        ActiveImageDataUri = dto.TestB64;
+        HasResult = false;
+        VerdictText = string.Empty;
+        IsLineHalted = false;
+        UsedTemplateFallback = false;
+        SelectedDefectIndex = null;
+        Stage1LatencyMs = 0;
+        RoundTripMs = 0;
+        Detections.Clear();
+        Decisions.Clear();
+        AlignedDefects.Clear();
+        HasError = true;
+        StatusOrErrorMessage = message;
+    }
+
+    [RelayCommand]
+    private void ClearResult()
+    {
+        TemplateImagePath = string.Empty;
+        TestImagePath = string.Empty;
+        VerdictText = string.Empty;
+        HasResult = false;
+        HasError = false;
+        IsLineHalted = false;
+        UsedTemplateFallback = false;
+        SelectedDefectIndex = null;
+        StatusOrErrorMessage = string.Empty;
+        Stage1LatencyMs = 0;
+        RoundTripMs = 0;
+        Detections.Clear();
+        Decisions.Clear();
+        AlignedDefects.Clear();
+        TemplateImageB64 = null;
+        TestImageB64 = null;
+        DiffImageB64 = null;
+        ActiveImageDataUri = null;
+    }
+
+    [RelayCommand]
+    private void SelectDefect(int index)
+    {
+        if (index < 0 || index >= AlignedDefects.Count)
+        {
+            return;
+        }
+
+        SelectedDefectIndex = SelectedDefectIndex == index ? null : index;
+    }
+
+    private void FailInspect(string message)
+    {
+        HasResult = false;
+        VerdictText = string.Empty;
+        IsLineHalted = false;
+        UsedTemplateFallback = false;
+        SelectedDefectIndex = null;
+        Detections.Clear();
+        Decisions.Clear();
+        AlignedDefects.Clear();
+        HasError = true;
+        StatusOrErrorMessage = message;
+    }
+
+    private void ClearInspectErrorOnNewPath()
+    {
+        if (!HasError)
+        {
+            return;
+        }
+
+        HasError = false;
+        StatusOrErrorMessage = string.Empty;
+    }
+
+    private void RefreshLocalPreview()
+    {
+        if (HasResult || IsBusy)
+        {
+            return;
+        }
+
+        string path = !string.IsNullOrWhiteSpace(TestImagePath) ? TestImagePath : TemplateImagePath;
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return;
+        }
+
+        try
+        {
+            byte[] bytes = File.ReadAllBytes(path);
+            string ext = Path.GetExtension(path).ToLowerInvariant();
+            string mime = ext switch
+            {
+                ".png" => "image/png",
+                ".bmp" => "image/bmp",
+                _ => "image/jpeg"
+            };
+            ActiveImageLayer = "Test";
+            ActiveImageDataUri = $"data:{mime};base64,{Convert.ToBase64String(bytes)}";
+        }
+        catch
+        {
+            // Preview is optional. Inspect still sends the file bytes.
+        }
+    }
+
+    private void NotifyChrome()
+    {
+        OnPropertyChanged(nameof(PrimaryActionLabel));
+        OnPropertyChanged(nameof(ShowWorkspace));
+        OnPropertyChanged(nameof(ShowFileNames));
+        OnPropertyChanged(nameof(HasBothImagePaths));
+        OnPropertyChanged(nameof(TemplateFileName));
+        OnPropertyChanged(nameof(TestFileName));
     }
 
     public void Dispose()

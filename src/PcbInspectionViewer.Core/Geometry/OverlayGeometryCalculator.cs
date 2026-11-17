@@ -153,4 +153,34 @@ public static class OverlayGeometryCalculator
 
         return result;
     }
+
+    public static int? HitTestDetection(
+        double x,
+        double y,
+        IReadOnlyList<BoundingBoxDetectionDto> detections,
+        double viewportWidth,
+        double viewportHeight,
+        double zoomFactor,
+        double panX,
+        double panY)
+    {
+        ArgumentNullException.ThrowIfNull(detections);
+
+        for (int i = detections.Count - 1; i >= 0; i--)
+        {
+            OverlayBoxProjection box = ProjectBox(
+                detections[i],
+                viewportWidth,
+                viewportHeight,
+                zoomFactor,
+                panX,
+                panY);
+            if (x >= box.Left && x <= box.Left + box.Width && y >= box.Top && y <= box.Top + box.Height)
+            {
+                return i;
+            }
+        }
+
+        return null;
+    }
 }

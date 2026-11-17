@@ -13,8 +13,7 @@ namespace PcbInspectionViewer.App.Controls;
 
 public sealed class DefectOverlayCanvas : FrameworkElement
 {
-    private static readonly SolidColorBrush CanvasBackgroundBrush = CreateFrozenBrush(15, 23, 42); // #0F172A
-    private static readonly SolidColorBrush PlaceholderTextBrush = CreateFrozenBrush(148, 163, 184); // #94A3B8
+    private static readonly SolidColorBrush CanvasBackgroundBrush = CreateFrozenBrush(246, 245, 242); // #F6F5F2
     private static readonly Typeface LabelTypeface = new(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
     private static readonly ConcurrentDictionary<string, (SolidColorBrush Stroke, SolidColorBrush Fill, Pen Pen)> PaletteCache = new(StringComparer.OrdinalIgnoreCase);
 
@@ -60,8 +59,15 @@ public sealed class DefectOverlayCanvas : FrameworkElement
             typeof(DefectOverlayCanvas),
             new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
 
+    public static readonly DependencyProperty SelectDefectCommandProperty =
+        DependencyProperty.Register(
+            nameof(SelectDefectCommand),
+            typeof(ICommand),
+            typeof(DefectOverlayCanvas));
+
     private BitmapSource? _cachedBitmap;
     private bool _isDragging;
+    private Point _pressPosition;
     private Point _lastMousePosition;
 
     public DefectOverlayCanvas()
@@ -106,6 +112,12 @@ public sealed class DefectOverlayCanvas : FrameworkElement
         set => SetValue(PanYProperty, value);
     }
 
+    public ICommand? SelectDefectCommand
+    {
+        get => (ICommand?)GetValue(SelectDefectCommandProperty);
+        set => SetValue(SelectDefectCommandProperty, value);
+    }
+
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         base.OnMouseWheel(e);
@@ -119,7 +131,8 @@ public sealed class DefectOverlayCanvas : FrameworkElement
     {
         base.OnMouseLeftButtonDown(e);
         _isDragging = true;
-        _lastMousePosition = e.GetPosition(this);
+        _pressPosition = e.GetPosition(this);
+        _lastMousePosition = _pressPosition;
         CaptureMouse();
         e.Handled = true;
     }
@@ -144,11 +157,35 @@ public sealed class DefectOverlayCanvas : FrameworkElement
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonUp(e);
-        if (_isDragging)
+        if (!_isDragging)
         {
-            _isDragging = false;
-            ReleaseMouseCapture();
-            e.Handled = true;
+            return;
+        }
+
+        Point up = e.GetPosition(this);
+        Vector moved = up - _pressPosition;
+        _isDragging = false;
+        ReleaseMouseCapture();
+        e.Handled = true;
+        if (moved.Length >= 4 || !ShowBoundingBoxes || Detections is null || SelectDefectCommand is null)
+        {
+            return;
+        }
+
+        IReadOnlyList<BoundingBoxDetectionDto> detections = Detections as IReadOnlyList<BoundingBoxDetectionDto>
+            ?? Detections.ToList();
+        int? hit = OverlayGeometryCalculator.HitTestDetection(
+            up.X,
+            up.Y,
+            detections,
+            ActualWidth,
+            ActualHeight,
+            ZoomFactor,
+            PanX,
+            PanY);
+        if (hit is int index && SelectDefectCommand.CanExecute(index))
+        {
+            SelectDefectCommand.Execute(index);
         }
     }
 
@@ -165,20 +202,6 @@ public sealed class DefectOverlayCanvas : FrameworkElement
 
         if (_cachedBitmap is null)
         {
-            var placeholder = new FormattedText(
-                "Select or drop a Golden Template and Test PCB image, then press Inspect (F5)",
-                CultureInfo.InvariantCulture,
-                FlowDirection.LeftToRight,
-                LabelTypeface,
-                14,
-                PlaceholderTextBrush,
-                pixelsPerDip);
-
-            dc.DrawText(
-                placeholder,
-                new Point(
-                    Math.Max(12, (viewportW - placeholder.Width) / 2.0),
-                    Math.Max(12, (viewportH - placeholder.Height) / 2.0)));
             return;
         }
 

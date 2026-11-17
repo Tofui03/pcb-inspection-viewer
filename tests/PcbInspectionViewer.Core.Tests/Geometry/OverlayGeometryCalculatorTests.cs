@@ -124,4 +124,19 @@ public sealed class OverlayGeometryCalculatorTests
         aligned.Should().HaveCount(2);
         aligned.Should().OnlyContain(item => item.Decision == null);
     }
+
+    [Fact]
+    public void HitTestDetection_ReturnsTopmostBoxUnderThePoint()
+    {
+        var detections = new[]
+        {
+            new BoundingBoxDetectionDto { X1 = 160, Y1 = 320, X2 = 320, Y2 = 480, DefectClass = "Short", Confidence = 0.92 },
+            new BoundingBoxDetectionDto { X1 = 0, Y1 = 0, X2 = 10, Y2 = 10, DefectClass = "Open", Confidence = 0.5 }
+        };
+
+        OverlayGeometryCalculator.HitTestDetection(350, 450, detections, 1000, 800, 1, 0, 0)
+            .Should().Be(0);
+        OverlayGeometryCalculator.HitTestDetection(1, 1, detections, 1000, 800, 1, 0, 0)
+            .Should().BeNull();
+    }
 }

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PcbInspectionViewer.Core.Api;
@@ -33,6 +34,15 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _llmProviderStatusText = "LLM: None";
 
+    [ObservableProperty]
+    private string _alarmText = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasAlarm;
+
+    [ObservableProperty]
+    private bool _alarmIsAmber;
+
     public MainShellViewModel(
         ISettingsService settingsService,
         IBackendHealthMonitor healthMonitor,
@@ -65,7 +75,46 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
         {
             History.DrillDownRequested += OnHistoryDrillDownRequested;
         }
+
+        if (Inspect is not null)
+        {
+            Inspect.PropertyChanged += OnChildPropertyChanged;
+        }
+
+        if (Ask is not null)
+        {
+            Ask.PropertyChanged += OnChildPropertyChanged;
+        }
+
+        RefreshAlarm();
     }
+
+    partial void OnIsBackendOnlineChanged(bool value)
+    {
+        if (Inspect is not null)
+        {
+            Inspect.IsBackendOffline = !value;
+        }
+
+        RefreshAlarm();
+    }
+
+    public void RefreshAlarm()
+    {
+        AlarmDecision decision = InspectAlarm.Decide(
+            IsBackendOnline,
+            Inspect?.HasError ?? false,
+            Inspect?.StatusOrErrorMessage,
+            Ask?.StatusMessage,
+            Inspect?.IsLineHalted ?? false,
+            Inspect?.HasResult ?? false,
+            Inspect?.UsedTemplateFallback ?? false);
+        AlarmText = decision.Text;
+        HasAlarm = decision.Kind != AlarmKind.None;
+        AlarmIsAmber = decision.IsAmber;
+    }
+
+    private void OnChildPropertyChanged(object? sender, PropertyChangedEventArgs e) => RefreshAlarm();
 
     public SettingsViewModel Settings { get; }
     public InspectViewModel? Inspect { get; }
@@ -205,6 +254,16 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
         if (History is not null)
         {
             History.DrillDownRequested -= OnHistoryDrillDownRequested;
+        }
+
+        if (Inspect is not null)
+        {
+            Inspect.PropertyChanged -= OnChildPropertyChanged;
+        }
+
+        if (Ask is not null)
+        {
+            Ask.PropertyChanged -= OnChildPropertyChanged;
         }
         _pollingCts.Cancel();
         _pollingCts.Dispose();

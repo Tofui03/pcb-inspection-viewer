@@ -272,110 +272,145 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXIT
 
 $exe = Join-Path $publishDir "PcbInspectionViewer.App.exe"
 $fixture = Join-Path $RepoRoot "tests/fixtures/upload_triage_sample.json"
-$readyFile = Join-Path $OutDir "ready.txt"
-if (Test-Path $readyFile) { Remove-Item -Force $readyFile }
 if (-not (Test-Path $exe)) { throw "Published executable was not found at $exe" }
 if (-not (Test-Path $fixture)) { throw "Fixture was not found at $fixture" }
 
-$argumentLine = "--fixture `"$fixture`" --window-size 1280x720 --ready-file `"$readyFile`" --cycle-layers"
-Write-Log ("Starting: {0} {1}" -f $exe, $argumentLine)
-$startInfo = New-Object System.Diagnostics.ProcessStartInfo
-$startInfo.FileName = $exe
-$startInfo.Arguments = $argumentLine
-$startInfo.WorkingDirectory = $publishDir
-$startInfo.UseShellExecute = $true
-$proc = [System.Diagnostics.Process]::Start($startInfo)
-if ($null -eq $proc) { throw "Process.Start returned no process for $exe" }
-Write-Log ("Viewer pid {0}" -f $proc.Id)
-
-$deadline = (Get-Date).AddSeconds(60)
-while (-not (Test-Path $readyFile)) {
-    if ($proc.HasExited) {
-        Write-Log ("Viewer exited early with code {0}" -f $proc.ExitCode)
-        $logDir = Join-Path $env:LOCALAPPDATA "PcbInspectionViewer\logs"
-        if (Test-Path $logDir) {
-            Get-ChildItem $logDir -Filter "*.log" | Sort-Object LastWriteTime -Descending | Select-Object -First 1 | ForEach-Object {
-                Write-Log ("App log {0}" -f $_.FullName)
-                Get-Content $_.FullName -Tail 80 | ForEach-Object { Write-Log $_ }
-            }
+function Stop-ViewerProcess([System.Diagnostics.Process]$Process) {
+    try {
+        if ($null -ne $Process -and -not $Process.HasExited) {
+            Stop-Process -Id $Process.Id -Force
+            Write-Log "Stopped viewer process."
         }
-        throw "Viewer process exited before it signaled ready."
     }
-    if ((Get-Date) -gt $deadline) {
-        throw "Timed out waiting for the viewer ready file."
+    catch {
+        Write-Log ("Could not stop viewer: {0}" -f $_.Exception.Message)
     }
-    Start-Sleep -Milliseconds 250
+    Start-Sleep -Milliseconds 500
 }
-Write-Log "Fixture applied; waiting for the window handle."
 
-$hwnd = [IntPtr]::Zero
-$handleDeadline = (Get-Date).AddSeconds(20)
-while ($hwnd -eq [IntPtr]::Zero) {
-    $hwnd = Get-ViewerWindow $proc
-    if ($hwnd -ne [IntPtr]::Zero) { break }
-    if ((Get-Date) -gt $handleDeadline) { throw "Timed out waiting for the PCB Inspection Viewer window." }
-    Start-Sleep -Milliseconds 200
-}
-Write-Log ("Window handle {0} title '{1}'" -f $hwnd, [ViewerCaptureNative]::WindowText($hwnd))
+function Invoke-ViewerCapture {
+    param(
+        [Parameter(Mandatory = $true)][string]$PngName,
+        [Parameter(Mandatory = $true)][string]$State,
+        [string]$ExtraArgs = "",
+        [switch]$Animate
+    )
 
-$screenBounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-$placeW = [Math]::Min(1280, [Math]::Max(640, $screenBounds.Width))
-$placeH = [Math]::Min(720, [Math]::Max(480, $screenBounds.Height))
-[void][ViewerCaptureNative]::ShowWindow($hwnd, [ViewerCaptureNative]::SW_RESTORE)
-[void][ViewerCaptureNative]::SetWindowPos($hwnd, [IntPtr]([ViewerCaptureNative]::HWND_TOPMOST), 0, 0, $placeW, $placeH, [ViewerCaptureNative]::SWP_SHOWWINDOW)
-[void][ViewerCaptureNative]::SetForegroundWindow($hwnd)
-Write-Log ("Placed window at 0,0 {0}x{1}" -f $placeW, $placeH)
-Start-Sleep -Milliseconds 600
+    $readyFile = Join-Path $OutDir ("ready-{0}.txt" -f ([IO.Path]::GetFileNameWithoutExtension($PngName)))
+    if (Test-Path $readyFile) { Remove-Item -Force $readyFile }
 
-$pngPath = Join-Path $OutDir "viewer-inspect.png"
-$still = Copy-WindowPng $hwnd $pngPath 1280 720
-$stillReal = Test-CaptureLooksReal $still
-if (-not $stillReal) {
-    Write-Log "First capture looked blank. Waking the window and trying once more."
+    $argumentLine = "--fixture `"$fixture`" --window-size 1280x720 --ready-file `"$readyFile`" --capture-state $State $ExtraArgs".Trim()
+    Write-Log ("Starting: {0} {1}" -f $exe, $argumentLine)
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $exe
+    $startInfo.Arguments = $argumentLine
+    $startInfo.WorkingDirectory = $publishDir
+    $startInfo.UseShellExecute = $true
+    $proc = [System.Diagnostics.Process]::Start($startInfo)
+    if ($null -eq $proc) { throw "Process.Start returned no process for $exe" }
+    Write-Log ("Viewer pid {0}" -f $proc.Id)
+
+    $deadline = (Get-Date).AddSeconds(60)
+    while (-not (Test-Path $readyFile)) {
+        if ($proc.HasExited) {
+            Write-Log ("Viewer exited early with code {0}" -f $proc.ExitCode)
+            $logDir = Join-Path $env:LOCALAPPDATA "PcbInspectionViewer\logs"
+            if (Test-Path $logDir) {
+                Get-ChildItem $logDir -Filter "*.log" | Sort-Object LastWriteTime -Descending | Select-Object -First 1 | ForEach-Object {
+                    Write-Log ("App log {0}" -f $_.FullName)
+                    Get-Content $_.FullName -Tail 80 | ForEach-Object { Write-Log $_ }
+                }
+            }
+            throw "Viewer process exited before it signaled ready."
+        }
+        if ((Get-Date) -gt $deadline) {
+            throw "Timed out waiting for the viewer ready file."
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    Write-Log "Fixture applied; waiting for the window handle."
+
+    $hwnd = [IntPtr]::Zero
+    $handleDeadline = (Get-Date).AddSeconds(20)
+    while ($hwnd -eq [IntPtr]::Zero) {
+        $hwnd = Get-ViewerWindow $proc
+        if ($hwnd -ne [IntPtr]::Zero) { break }
+        if ((Get-Date) -gt $handleDeadline) { throw "Timed out waiting for the PCB Inspection Viewer window." }
+        Start-Sleep -Milliseconds 200
+    }
+    Write-Log ("Window handle {0} title '{1}'" -f $hwnd, [ViewerCaptureNative]::WindowText($hwnd))
+
+    $screenBounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $placeW = [Math]::Min(1280, [Math]::Max(640, $screenBounds.Width))
+    $placeH = [Math]::Min(720, [Math]::Max(480, $screenBounds.Height))
+    [void][ViewerCaptureNative]::ShowWindow($hwnd, [ViewerCaptureNative]::SW_RESTORE)
+    [void][ViewerCaptureNative]::SetWindowPos($hwnd, [IntPtr]([ViewerCaptureNative]::HWND_TOPMOST), 0, 0, $placeW, $placeH, [ViewerCaptureNative]::SWP_SHOWWINDOW)
     [void][ViewerCaptureNative]::SetForegroundWindow($hwnd)
-    [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(200, 200)
-    Start-Sleep -Milliseconds 800
-    $still.Dispose()
+    Write-Log ("Placed window at 0,0 {0}x{1}" -f $placeW, $placeH)
+    Start-Sleep -Milliseconds 600
+
+    $pngPath = Join-Path $OutDir $PngName
     $still = Copy-WindowPng $hwnd $pngPath 1280 720
     $stillReal = Test-CaptureLooksReal $still
-}
-
-$frames = New-Object System.Collections.Generic.List[System.Drawing.Bitmap]
-$frames.Add($still)
-for ($i = 0; $i -lt 5; $i++) {
-    Start-Sleep -Milliseconds 1000
-    [void][ViewerCaptureNative]::SetForegroundWindow($hwnd)
-    $framePath = Join-Path $OutDir ("frame-{0}.png" -f ($i + 1))
-    $frame = Copy-WindowPng $hwnd $framePath 1280 720
-    $frames.Add($frame)
-}
-
-$gifPath = Join-Path $OutDir "inspect-loop.gif"
-try {
-    $frameArray = [System.Drawing.Bitmap[]]$frames.ToArray()
-    [GifSequence]::Save($gifPath, $frameArray, 100)
-    Write-Log ("Wrote GIF {0} ({1} bytes)" -f $gifPath, (Get-Item $gifPath).Length)
-}
-catch {
-    Write-Log ("GIF encoding failed: {0}" -f $_.Exception.Message)
-}
-
-foreach ($frame in $frames) { $frame.Dispose() }
-
-try {
-    if (-not $proc.HasExited) {
-        Stop-Process -Id $proc.Id -Force
-        Write-Log "Stopped viewer process."
+    if (-not $stillReal) {
+        Write-Log "First capture looked blank. Waking the window and trying once more."
+        [void][ViewerCaptureNative]::SetForegroundWindow($hwnd)
+        [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(200, 200)
+        Start-Sleep -Milliseconds 800
+        $still.Dispose()
+        $still = Copy-WindowPng $hwnd $pngPath 1280 720
+        $stillReal = Test-CaptureLooksReal $still
     }
-}
-catch {
-    Write-Log ("Could not stop viewer: {0}" -f $_.Exception.Message)
+
+    if ($Animate) {
+        $frames = New-Object System.Collections.Generic.List[System.Drawing.Bitmap]
+        $frames.Add($still)
+        for ($i = 0; $i -lt 5; $i++) {
+            Start-Sleep -Milliseconds 1000
+            [void][ViewerCaptureNative]::SetForegroundWindow($hwnd)
+            $framePath = Join-Path $OutDir ("frame-{0}.png" -f ($i + 1))
+            $frame = Copy-WindowPng $hwnd $framePath 1280 720
+            $frames.Add($frame)
+        }
+
+        $gifPath = Join-Path $OutDir "inspect-loop.gif"
+        try {
+            $frameArray = [System.Drawing.Bitmap[]]$frames.ToArray()
+            [GifSequence]::Save($gifPath, $frameArray, 100)
+            Write-Log ("Wrote GIF {0} ({1} bytes)" -f $gifPath, (Get-Item $gifPath).Length)
+        }
+        catch {
+            Write-Log ("GIF encoding failed: {0}" -f $_.Exception.Message)
+        }
+
+        foreach ($frame in $frames) { $frame.Dispose() }
+    }
+    else {
+        $still.Dispose()
+    }
+
+    Stop-ViewerProcess $proc
+
+    if (-not $stillReal) {
+        throw "Screen capture did not contain a real rendered window (image is blank or nearly a single color). Refusing to treat it as a UI screenshot."
+    }
+
+    $png = Get-Item $pngPath
+    Write-Log ("Wrote PNG {0} ({1} bytes)" -f $png.FullName, $png.Length)
 }
 
-if (-not $stillReal) {
-    throw "Screen capture did not contain a real rendered window (image is blank or nearly a single color). Refusing to treat it as a UI screenshot."
+$shots = @(
+    @{ Name = "viewer-inspect.png"; State = "result"; Extra = "--cycle-layers"; Animate = $true },
+    @{ Name = "viewer-inspect-detail.png"; State = "result"; Extra = "--select-defect 0"; Animate = $false },
+    @{ Name = "viewer-error-offline.png"; State = "offline"; Extra = ""; Animate = $false },
+    @{ Name = "viewer-error-pair.png"; State = "pair"; Extra = ""; Animate = $false },
+    @{ Name = "viewer-error-sql.png"; State = "sql"; Extra = ""; Animate = $false },
+    @{ Name = "viewer-error-halted.png"; State = "halted"; Extra = ""; Animate = $false },
+    @{ Name = "viewer-error-fallback.png"; State = "fallback"; Extra = ""; Animate = $false }
+)
+
+foreach ($shot in $shots) {
+    Invoke-ViewerCapture -PngName $shot.Name -State $shot.State -ExtraArgs $shot.Extra -Animate:([bool]$shot.Animate)
 }
 
-$png = Get-Item $pngPath
-Write-Log ("Wrote PNG {0} ({1} bytes)" -f $png.FullName, $png.Length)
 Write-Log "CAPTURE_OK"
