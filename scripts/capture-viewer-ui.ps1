@@ -20,10 +20,11 @@ function Write-Log([string]$Message) {
     Write-Host $line
 }
 
+Write-Log ("Host: {0} {1}" -f $PSVersionTable.PSEdition, $PSVersionTable.PSVersion)
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
 
-Add-Type @"
+Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @"
 using System;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -351,7 +352,7 @@ for ($i = 0; $i -lt 5; $i++) {
 
 $gifPath = Join-Path $OutDir "inspect-loop.gif"
 try {
-    $frameArray = $frames.ToArray()
+    $frameArray = [System.Drawing.Bitmap[]]$frames.ToArray()
     [GifSequence]::Save($gifPath, $frameArray, 100)
     Write-Log ("Wrote GIF {0} ({1} bytes)" -f $gifPath, (Get-Item $gifPath).Length)
 }

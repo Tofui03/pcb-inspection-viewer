@@ -26,7 +26,7 @@ internal static class CaptureFixtureHost
             return;
         }
 
-        if (shell.Inspect is null)
+        if (shell.Inspect is not InspectViewModel inspect)
         {
             throw new InvalidOperationException("Inspect view model is not available.");
         }
@@ -49,25 +49,26 @@ internal static class CaptureFixtureHost
         await using FileStream stream = File.OpenRead(fixturePath);
         UploadTriageResponseDto? dto = await JsonSerializer.DeserializeAsync<UploadTriageResponseDto>(
             stream,
-            cancellationToken: cancellationToken).ConfigureAwait(true);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
         if (dto is null || string.IsNullOrWhiteSpace(dto.BoardDisposition))
         {
             throw new InvalidOperationException($"Fixture '{fixturePath}' did not contain an inspection result.");
         }
 
-        shell.Inspect.ShowRecordedResult(
-            new UploadTriageEnvelope(dto, RoundTripMs: 0),
-            dto.BatchId,
-            dto.IpcClass);
-        shell.SelectedTabIndex = 0;
-
-        window.UpdateLayout();
-        await window.Dispatcher.InvokeAsync(static () => { }, DispatcherPriority.ApplicationIdle);
-
-        if (HasFlag(args, "--cycle-layers"))
+        await window.Dispatcher.InvokeAsync(() =>
         {
-            StartLayerCycle(shell.Inspect);
-        }
+            inspect.ShowRecordedResult(
+                new UploadTriageEnvelope(dto, RoundTripMs: 0),
+                dto.BatchId,
+                dto.IpcClass);
+            shell.SelectedTabIndex = 0;
+            window.UpdateLayout();
+            if (HasFlag(args, "--cycle-layers"))
+            {
+                StartLayerCycle(inspect);
+            }
+        });
+        await window.Dispatcher.InvokeAsync(static () => { }, DispatcherPriority.ApplicationIdle);
 
         if (TryGetOption(args, "--ready-file", out string readyFile))
         {
@@ -78,7 +79,7 @@ internal static class CaptureFixtureHost
             }
 
             await File.WriteAllTextAsync(readyFile, DateTime.UtcNow.ToString("o"), cancellationToken)
-                .ConfigureAwait(true);
+                .ConfigureAwait(false);
         }
     }
 
