@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PcbInspectionViewer.Core.Api;
@@ -114,7 +115,76 @@ public sealed partial class MainShellViewModel : ObservableObject, IDisposable
         AlarmIsAmber = decision.IsAmber;
     }
 
-    private void OnChildPropertyChanged(object? sender, PropertyChangedEventArgs e) => RefreshAlarm();
+    private void OnChildPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        RefreshAlarm();
+        OnPropertyChanged(nameof(FooterText));
+    }
+
+    partial void OnBackendStatusTextChanged(string value) => OnPropertyChanged(nameof(FooterText));
+
+    public string FooterText
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(BackendStatusText))
+            {
+                parts.Add(BackendStatusText);
+            }
+
+            if (Inspect is not null)
+            {
+                if (!string.IsNullOrWhiteSpace(Inspect.BatchId))
+                {
+                    parts.Add(Inspect.BatchId);
+                }
+
+                if (!string.IsNullOrWhiteSpace(Inspect.IpcClass))
+                {
+                    parts.Add(Inspect.IpcClass);
+                }
+
+                if (Inspect.HasResult)
+                {
+                    parts.Add(Inspect.Stage1LatencyMs.ToString("0.0", CultureInfo.InvariantCulture) + " ms");
+                }
+            }
+
+            return string.Join(" · ", parts);
+        }
+    }
+
+    public void PresentBackend(bool online)
+    {
+        IsBackendOnline = online;
+        if (online)
+        {
+            BackendStatusText = "Backend online";
+            if (DetectorAndVersionText.Contains("offline", StringComparison.OrdinalIgnoreCase))
+            {
+                DetectorAndVersionText = "online";
+            }
+        }
+        else
+        {
+            BackendStatusText = "Backend offline";
+            DetectorAndVersionText = "offline";
+        }
+    }
+
+    public void PresentLlmProvider(string? provider)
+    {
+        string normalized = string.IsNullOrWhiteSpace(provider) ? "None" : provider;
+        Inspect?.UseLlmProvider(normalized);
+        Settings.LlmProvider = normalized;
+        UpdateLlmStatusText(new LlmOptions
+        {
+            Provider = normalized,
+            ModelName = Settings.ModelName,
+            SummaryLanguage = Settings.SummaryLanguage
+        });
+    }
 
     public SettingsViewModel Settings { get; }
     public InspectViewModel? Inspect { get; }

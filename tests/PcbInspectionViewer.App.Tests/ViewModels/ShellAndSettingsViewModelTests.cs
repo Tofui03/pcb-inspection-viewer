@@ -62,6 +62,44 @@ public sealed class ShellAndSettingsViewModelTests
         shellVm.IsBackendOnline.Should().BeFalse();
         shellVm.BackendStatusText.Should().Be("Backend offline");
         shellVm.BackendStatusTooltip.Should().Contain("Connection refused");
+        shellVm.FooterText.Should().Be("Backend offline");
+    }
+
+    [Fact]
+    public void PresentBackend_WhenForcedOnline_DoesNotKeepAnOfflineDetectorLine()
+    {
+        var settingsService = Substitute.For<ISettingsService>();
+        settingsService.DatabaseFilePath.Returns("/tmp/inspections.db");
+        var healthMonitor = Substitute.For<IBackendHealthMonitor>();
+        var settingsVm = new SettingsViewModel(settingsService, healthMonitor);
+        var inspect = new InspectViewModel(Substitute.For<IInspectionApiClient>(), settingsService);
+        using var shellVm = new MainShellViewModel(settingsService, healthMonitor, settingsVm, inspect);
+
+        shellVm.DetectorAndVersionText = "unknown · offline";
+        shellVm.PresentBackend(true);
+
+        shellVm.IsBackendOnline.Should().BeTrue();
+        shellVm.BackendStatusText.Should().Be("Backend online");
+        shellVm.DetectorAndVersionText.Should().NotContain("offline");
+        shellVm.FooterText.Should().StartWith("Backend online");
+        inspect.IsBackendOffline.Should().BeFalse();
+    }
+
+    [Fact]
+    public void PresentLlmProvider_Gemini_IsTheSameProviderTheFallbackBannerUses()
+    {
+        var settingsService = Substitute.For<ISettingsService>();
+        settingsService.DatabaseFilePath.Returns("/tmp/inspections.db");
+        var healthMonitor = Substitute.For<IBackendHealthMonitor>();
+        var settingsVm = new SettingsViewModel(settingsService, healthMonitor);
+        var inspect = new InspectViewModel(Substitute.For<IInspectionApiClient>(), settingsService);
+        using var shellVm = new MainShellViewModel(settingsService, healthMonitor, settingsVm, inspect);
+
+        shellVm.PresentLlmProvider("Gemini");
+
+        settingsVm.LlmProvider.Should().Be("Gemini");
+        shellVm.LlmProviderStatusText.Should().Contain("Gemini");
+        shellVm.LlmProviderStatusText.Should().NotContain("None");
     }
 
     [Fact]

@@ -99,16 +99,14 @@ internal static class CaptureFixtureHost
         string normalized = state.Trim().ToLowerInvariant();
         if (normalized == "offline")
         {
-            shell.IsBackendOnline = false;
-            shell.BackendStatusText = "Backend offline";
+            shell.PresentBackend(false);
             inspect.IsBackendOffline = true;
             shell.SelectedTabIndex = 0;
             shell.RefreshAlarm();
             return;
         }
 
-        shell.IsBackendOnline = true;
-        shell.BackendStatusText = "Backend online";
+        shell.PresentBackend(true);
         inspect.IsBackendOffline = false;
 
         var envelope = new UploadTriageEnvelope(dto, RoundTripMs: 0);
@@ -121,7 +119,7 @@ internal static class CaptureFixtureHost
                 shell.SelectedTabIndex = 0;
                 break;
             case "fallback":
-                inspect.UseLlmProvider("Gemini");
+                shell.PresentLlmProvider("Gemini");
                 inspect.ShowRecordedResult(envelope, dto.BatchId, dto.IpcClass);
                 shell.SelectedTabIndex = 0;
                 break;

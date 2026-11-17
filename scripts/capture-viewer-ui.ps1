@@ -47,6 +47,7 @@ public static class ViewerCaptureNative {
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+    [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
@@ -201,11 +202,49 @@ function Get-ViewerWindow([System.Diagnostics.Process]$Process) {
     return [IntPtr]::Zero
 }
 
-function Copy-WindowPng([IntPtr]$Window, [string]$Path, [int]$Width, [int]$Height) {
-    $rect = New-Object ViewerCaptureNative+RECT
-    if (-not [ViewerCaptureNative]::GetWindowRect($Window, [ref]$rect)) {
+function Get-VisibleWindowRect([IntPtr]$Window) {
+    $visible = New-Object ViewerCaptureNative+RECT
+    $bytes = [Runtime.InteropServices.Marshal]::SizeOf($visible)
+    # DWMWA_EXTENDED_FRAME_BOUNDS = 9. This is the visible window, without the invisible resize border.
+    $hr = [ViewerCaptureNative]::DwmGetWindowAttribute($Window, 9, [ref]$visible, $bytes)
+    if ($hr -eq 0 -and ($visible.Right - $visible.Left) -gt 50 -and ($visible.Bottom - $visible.Top) -gt 50) {
+        return $visible
+    }
+
+    $outer = New-Object ViewerCaptureNative+RECT
+    if (-not [ViewerCaptureNative]::GetWindowRect($Window, [ref]$outer)) {
         throw "GetWindowRect failed."
     }
+    return $outer
+}
+
+function Place-ViewerWindow([IntPtr]$Window, [int]$TargetWidth, [int]$TargetHeight) {
+    $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $width = [Math]::Min($TargetWidth, $screen.Width)
+    $height = [Math]::Min($TargetHeight, $screen.Height)
+    [void][ViewerCaptureNative]::ShowWindow($Window, [ViewerCaptureNative]::SW_RESTORE)
+    [void][ViewerCaptureNative]::SetWindowPos($Window, [IntPtr]([ViewerCaptureNative]::HWND_TOPMOST), $screen.Left, $screen.Top, $width, $height, [ViewerCaptureNative]::SWP_SHOWWINDOW)
+
+    $outer = New-Object ViewerCaptureNative+RECT
+    if (-not [ViewerCaptureNative]::GetWindowRect($Window, [ref]$outer)) {
+        throw "GetWindowRect failed while placing the viewer."
+    }
+    $visible = Get-VisibleWindowRect $Window
+    $marginLeft = $visible.Left - $outer.Left
+    $marginTop = $visible.Top - $outer.Top
+    $marginRight = $outer.Right - $visible.Right
+    $marginBottom = $outer.Bottom - $visible.Bottom
+    $x = $screen.Left - $marginLeft
+    $y = $screen.Top - $marginTop
+    $cx = $width + $marginLeft + $marginRight
+    $cy = $height + $marginTop + $marginBottom
+    [void][ViewerCaptureNative]::SetWindowPos($Window, [IntPtr]([ViewerCaptureNative]::HWND_TOPMOST), $x, $y, $cx, $cy, [ViewerCaptureNative]::SWP_SHOWWINDOW)
+    [void][ViewerCaptureNative]::SetForegroundWindow($Window)
+    Write-Log ("Placed visible frame at {0},{1} {2}x{3} (outer margins {4},{5},{6},{7})" -f $screen.Left, $screen.Top, $width, $height, $marginLeft, $marginTop, $marginRight, $marginBottom)
+}
+
+function Copy-WindowPng([IntPtr]$Window, [string]$Path, [int]$Width, [int]$Height) {
+    $rect = Get-VisibleWindowRect $Window
     $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
     $left = [Math]::Max($rect.Left, $bounds.Left)
     $top = [Math]::Max($rect.Top, $bounds.Top)
@@ -340,13 +379,7 @@ function Invoke-ViewerCapture {
     }
     Write-Log ("Window handle {0} title '{1}'" -f $hwnd, [ViewerCaptureNative]::WindowText($hwnd))
 
-    $screenBounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-    $placeW = [Math]::Min(1280, [Math]::Max(640, $screenBounds.Width))
-    $placeH = [Math]::Min(720, [Math]::Max(480, $screenBounds.Height))
-    [void][ViewerCaptureNative]::ShowWindow($hwnd, [ViewerCaptureNative]::SW_RESTORE)
-    [void][ViewerCaptureNative]::SetWindowPos($hwnd, [IntPtr]([ViewerCaptureNative]::HWND_TOPMOST), 0, 0, $placeW, $placeH, [ViewerCaptureNative]::SWP_SHOWWINDOW)
-    [void][ViewerCaptureNative]::SetForegroundWindow($hwnd)
-    Write-Log ("Placed window at 0,0 {0}x{1}" -f $placeW, $placeH)
+    Place-ViewerWindow $hwnd 1280 720
     Start-Sleep -Milliseconds 600
 
     $pngPath = Join-Path $OutDir $PngName

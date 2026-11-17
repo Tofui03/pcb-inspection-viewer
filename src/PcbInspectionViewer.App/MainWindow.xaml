@@ -23,7 +23,6 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0" Padding="12,8" Visibility="{Binding HasAlarm, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -806,6 +805,16 @@
                                    FontSize="20"
                                    FontWeight="Bold"
                                    Foreground="#0F172A"
+                                   Margin="0,0,0,8" />
+
+                        <TextBlock Text="{Binding DataContext.DatabasePathText, RelativeSource={RelativeSource AncestorType=Window}}"
+                                   FontSize="12"
+                                   Foreground="#64748B"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,4" />
+                        <TextBlock Text="{Binding DataContext.LlmProviderStatusText, RelativeSource={RelativeSource AncestorType=Window}}"
+                                   FontSize="12"
+                                   Foreground="#64748B"
                                    Margin="0,0,0,16" />
 
                         <!-- API Settings -->
@@ -912,56 +921,7 @@
         </TabControl>
 
         <Border Grid.Row="2" BorderBrush="{StaticResource Brush.Line}" BorderThickness="0,1,0,0" Padding="16,6" Background="{StaticResource Brush.Paper}">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding BackendStatusText}" FontSize="12" Foreground="{StaticResource Brush.Muted}" Margin="0,0,16,0" />
-                <TextBlock Text="{Binding Inspect.BatchId}" FontSize="12" Foreground="{StaticResource Brush.Muted}" Margin="0,0,16,0" />
-                <TextBlock Text="{Binding Inspect.IpcClass}" FontSize="12" Foreground="{StaticResource Brush.Muted}" Margin="0,0,16,0" />
-                <TextBlock Text="{Binding Inspect.Stage1LatencyMs, StringFormat={}{0:0.0} ms}" FontSize="12" Foreground="{StaticResource Brush.Muted}"
-                           Visibility="{Binding Inspect.HasResult, Converter={StaticResource BooleanToVisibilityConverter}}" />
-            </StackPanel>
+            <TextBlock Text="{Binding FooterText}" FontSize="12" Foreground="{StaticResource Brush.Muted}" />
         </Border>
-
-        <!-- Bottom Status Bar (§7.5) -->
-        <StatusBar Grid.Row="3"
-                   Background="#0F172A"
-                   Foreground="#F8FAFC"
-                   Padding="12,6">
-            <StatusBarItem>
-                <Border Background="{Binding IsBackendOnline, Converter={StaticResource OnlineToStatusBrushConverter}}"
-                        CornerRadius="10"
-                        Padding="10,2"
-                        ToolTip="{Binding BackendStatusTooltip}">
-                    <TextBlock Text="{Binding BackendStatusText}"
-                               Foreground="White"
-                               FontWeight="SemiBold"
-                               FontSize="12" />
-                </Border>
-            </StatusBarItem>
-
-            <Separator Background="#334155" Margin="8,0" />
-
-            <StatusBarItem>
-                <TextBlock Text="{Binding DetectorAndVersionText}"
-                           Foreground="#E2E8F0"
-                           FontSize="12" />
-            </StatusBarItem>
-
-            <Separator Background="#334155" Margin="8,0" />
-
-            <StatusBarItem>
-                <TextBlock Text="{Binding DatabasePathText}"
-                           Foreground="#94A3B8"
-                           FontSize="12"
-                           ToolTip="Local SQLite inspection history path" />
-            </StatusBarItem>
-
-            <Separator Background="#334155" Margin="8,0" />
-
-            <StatusBarItem>
-                <TextBlock Text="{Binding LlmProviderStatusText}"
-                           Foreground="#E2E8F0"
-                           FontSize="12" />
-            </StatusBarItem>
-        </StatusBar>
     </Grid>
 </Window>
