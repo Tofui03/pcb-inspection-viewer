@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - "cursor/**"
+      - main
     paths-ignore:
       - "docs/**"
       - "**.md"

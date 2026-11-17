@@ -37,3 +37,8 @@ settings.local.json
 *.db-wal
 cache/
 logs/
+
+# Knowledge graph and Python helper caches
+graphify-out/
+__pycache__/
+*.py[cod]
