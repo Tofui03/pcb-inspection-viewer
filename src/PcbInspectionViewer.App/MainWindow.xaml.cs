@@ -99,17 +99,62 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnBrowseTemplateClick(object sender, RoutedEventArgs e) =>
-        BrowseAndAssignImage(isTemplate: true);
+    private async void OnPrimaryClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainShellViewModel shell || shell.Inspect is not { } inspect)
+        {
+            return;
+        }
 
-    private void OnBrowseTestClick(object sender, RoutedEventArgs e) =>
-        BrowseAndAssignImage(isTemplate: false);
+        if (inspect.IsBusy)
+        {
+            inspect.CancelInspectCommand.Execute(null);
+            return;
+        }
 
-    private void BrowseAndAssignImage(bool isTemplate)
+        if (inspect.IsBackendOffline)
+        {
+            await shell.RefreshHealthAsync();
+            if (shell.IsBackendOnline && inspect.HasBothImagePaths && inspect.InspectCommand.CanExecute(null))
+            {
+                await inspect.InspectCommand.ExecuteAsync(null);
+            }
+
+            return;
+        }
+
+        if (inspect.HasResult && !inspect.HasError)
+        {
+            inspect.ClearResultCommand.Execute(null);
+            return;
+        }
+
+        if (!inspect.HasBothImagePaths)
+        {
+            if (!BrowseAndAssignImage(isTemplate: true))
+            {
+                return;
+            }
+
+            if (!inspect.HasBothImagePaths)
+            {
+                BrowseAndAssignImage(isTemplate: false);
+            }
+
+            return;
+        }
+
+        if (inspect.InspectCommand.CanExecute(null))
+        {
+            await inspect.InspectCommand.ExecuteAsync(null);
+        }
+    }
+
+    private bool BrowseAndAssignImage(bool isTemplate)
     {
         if (InspectVm is null)
         {
-            return;
+            return false;
         }
 
         var dialog = new OpenFileDialog
@@ -121,8 +166,10 @@ public partial class MainWindow : Window
 
         if (dialog.ShowDialog(this) == true)
         {
-            InspectVm.TrySetImagePathFromDrop(dialog.FileName, isTemplate: isTemplate);
+            return InspectVm.TrySetImagePathFromDrop(dialog.FileName, isTemplate: isTemplate);
         }
+
+        return false;
     }
 
     private void OnImageDropZoneDragOver(object sender, DragEventArgs e)

@@ -2,13 +2,13 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:PcbInspectionViewer.App.Controls"
-        Title="PCB Inspection Viewer — DeepPCB-AOI Operator Station"
+        Title="PCB Inspection Viewer"
         Width="1360"
         Height="860"
         MinWidth="1080"
         MinHeight="700"
         WindowStartupLocation="CenterScreen"
-        Background="#F8FAFC"
+        Background="{StaticResource Brush.Paper}"
         PreviewKeyDown="OnWindowPreviewKeyDown">
     <Window.InputBindings>
         <KeyBinding Key="F5" Command="{Binding Inspect.InspectCommand}" />
@@ -20,415 +20,207 @@
 
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TabControl Grid.Row="0"
+        <Border Grid.Row="0" Padding="12,8" Visibility="{Binding HasAlarm, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Background" Value="{StaticResource Brush.Alarm}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding AlarmIsAmber}" Value="True">
+                            <Setter Property="Background" Value="{StaticResource Brush.Amber}" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <TextBlock Text="{Binding AlarmText}" FontSize="13" FontWeight="Bold" TextWrapping="Wrap">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{StaticResource Brush.AlarmInk}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding AlarmIsAmber}" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource Brush.AmberInk}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </Border>
+
+        <TabControl Grid.Row="1"
                     SelectedIndex="{Binding SelectedTabIndex}"
                     Margin="12,12,12,8"
                     Background="White"
                     BorderBrush="#CBD5E1">
             <!-- Screen 1: Single Inspect (F1) -->
-            <TabItem Header="1. Single Inspect (F1)">
+            <TabItem Header="Single Inspect">
                 <Grid Margin="16" DataContext="{Binding Inspect}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="320" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="380" />
-                    </Grid.ColumnDefinitions>
+                    <Grid Visibility="{Binding ShowWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="340" />
+                        </Grid.ColumnDefinitions>
 
-                    <!-- Left Column: Inputs & Controls -->
-                    <Border Grid.Column="0"
-                            Background="#F8FAFC"
-                            BorderBrush="#E2E8F0"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="16"
-                            Margin="0,0,12,0"
-                            AllowDrop="True"
-                            PreviewDragOver="OnImageDropZoneDragOver"
-                            Drop="OnTestImageDrop">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <StackPanel>
-                                <TextBlock Text="Single-Board Inspection (F1)"
-                                           FontSize="16"
-                                           FontWeight="Bold"
-                                           Foreground="#0F172A"
-                                           Margin="0,0,0,12" />
-
-                                <!-- Golden Template Picker -->
-                                <TextBlock Text="Golden Template Image (.jpg/.png/.bmp)"
-                                           FontWeight="SemiBold"
-                                           Foreground="#334155"
-                                           Margin="0,4,0,4" />
-                                <Border Background="White"
-                                        BorderBrush="#CBD5E1"
-                                        BorderThickness="1"
-                                        CornerRadius="6"
-                                        Padding="8"
-                                        Margin="0,0,0,8"
-                                        AllowDrop="True"
-                                        PreviewDragOver="OnImageDropZoneDragOver"
-                                        Drop="OnTemplateImageDrop">
-                                    <StackPanel>
-                                        <TextBox Text="{Binding TemplateImagePath, UpdateSourceTrigger=PropertyChanged}"
-                                                 IsReadOnly="True"
-                                                 Background="Transparent"
-                                                 BorderThickness="0"
-                                                 Foreground="#334155"
-                                                 FontSize="12"
-                                                 TextWrapping="Wrap"
-                                                 ToolTip="{Binding TemplateImagePath}" />
-                                        <Button Content="Browse Golden Template..."
-                                                Click="OnBrowseTemplateClick"
-                                                Margin="0,6,0,0"
-                                                Padding="10,5" />
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Clean-Board Mode -->
-                                <CheckBox Content="Clean-Board Mode (Test = Template)"
-                                          IsChecked="{Binding CleanBoardMode}"
-                                          Margin="0,2,0,10" />
-
-                                <!-- Test Image Picker -->
-                                <TextBlock Text="Test Board Image (Ctrl+O or Drag &amp; Drop)"
-                                           FontWeight="SemiBold"
-                                           Foreground="#334155"
-                                           Margin="0,4,0,4" />
-                                <Border Background="White"
-                                        BorderBrush="#CBD5E1"
-                                        BorderThickness="1"
-                                        CornerRadius="6"
-                                        Padding="8"
-                                        Margin="0,0,0,12"
-                                        AllowDrop="True"
-                                        PreviewDragOver="OnImageDropZoneDragOver"
-                                        Drop="OnTestImageDrop">
-                                    <StackPanel>
-                                        <TextBox Text="{Binding TestImagePath, UpdateSourceTrigger=PropertyChanged}"
-                                                 IsReadOnly="True"
-                                                 Background="Transparent"
-                                                 BorderThickness="0"
-                                                 Foreground="#334155"
-                                                 FontSize="12"
-                                                 TextWrapping="Wrap"
-                                                 ToolTip="{Binding TestImagePath}" />
-                                        <Button Content="Browse Test Image (Ctrl+O)..."
-                                                Click="OnBrowseTestClick"
-                                                Margin="0,6,0,0"
-                                                Padding="10,5" />
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Batch ID & IPC Class -->
-                                <TextBlock Text="Batch ID"
-                                           FontWeight="SemiBold"
-                                           Foreground="#334155"
-                                           Margin="0,2,0,2" />
-                                <TextBox Text="{Binding BatchId, UpdateSourceTrigger=PropertyChanged}"
-                                         Padding="8,6"
-                                         Margin="0,0,0,10" />
-
-                                <TextBlock Text="IPC-A-600 Class"
-                                           FontWeight="SemiBold"
-                                           Foreground="#334155"
-                                           Margin="0,2,0,2" />
-                                <ComboBox ItemsSource="{Binding AllowedIpcClasses}"
-                                          SelectedItem="{Binding IpcClass}"
-                                          Padding="8,6"
-                                          Margin="0,0,0,10" />
-
-                                <CheckBox Content="Colorize PCB (green solder-mask &amp; copper)"
-                                          IsChecked="{Binding ColorizePcb}"
-                                          Margin="0,2,0,6" />
-
-                                <CheckBox Content="Simulate Rogue VLM (Guardrail Audit)"
-                                          IsChecked="{Binding SimulateRogueVlm}"
-                                          Margin="0,2,0,14" />
-
-                                <!-- Inspect / Cancel Actions -->
-                                <Grid Margin="0,4,0,8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <Button Grid.Column="0"
-                                            Content="Inspect Board (F5)"
-                                            Command="{Binding InspectCommand}"
-                                            Background="#2563EB"
-                                            Foreground="White"
-                                            FontWeight="Bold"
-                                            Padding="12,10"
-                                            Margin="0,0,8,0" />
-
-                                    <Button Grid.Column="1"
-                                            Content="Cancel (Esc)"
-                                            Command="{Binding CancelInspectCommand}"
-                                            Padding="12,10" />
-                                </Grid>
-
-                                <ProgressBar IsIndeterminate="True"
-                                             Height="6"
-                                             Margin="0,4,0,8"
-                                             Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
-
-                                <TextBlock Text="{Binding StatusOrErrorMessage}"
-                                           TextWrapping="Wrap"
-                                           FontSize="12.5"
-                                           FontWeight="SemiBold"
-                                           Foreground="#334155"
-                                           Margin="0,4,0,0" />
-                            </StackPanel>
-                        </ScrollViewer>
-                    </Border>
-
-                    <!-- Center Column: Layer Toggle Bar + DefectOverlayCanvas -->
-                    <Grid Grid.Column="1" Margin="0,0,12,0">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-
-                        <Border Grid.Row="0"
-                                Background="#F1F5F9"
-                                BorderBrush="#CBD5E1"
-                                BorderThickness="1"
-                                CornerRadius="6"
-                                Padding="10,6"
-                                Margin="0,0,0,8">
-                            <WrapPanel VerticalAlignment="Center">
-                                <TextBlock Text="Layer:"
-                                           FontWeight="SemiBold"
-                                           Foreground="#334155"
-                                           VerticalAlignment="Center"
-                                           Margin="0,0,8,0" />
-                                <Button Content="Test"
-                                        Command="{Binding SelectLayerCommand}"
-                                        CommandParameter="Test"
-                                        Padding="10,4"
-                                        Margin="0,0,6,0" />
-                                <Button Content="Template"
-                                        Command="{Binding SelectLayerCommand}"
-                                        CommandParameter="Template"
-                                        Padding="10,4"
-                                        Margin="0,0,6,0" />
-                                <Button Content="Diff (Heatmap)"
-                                        Command="{Binding SelectLayerCommand}"
-                                        CommandParameter="Diff"
-                                        Padding="10,4"
-                                        Margin="0,0,12,0" />
-
-                                <CheckBox Content="Show Defect Boxes"
-                                          IsChecked="{Binding ShowBoundingBoxes}"
-                                          VerticalAlignment="Center"
-                                          FontWeight="SemiBold"
-                                          Margin="0,0,12,0" />
-
-                                <Button Content="Reset Zoom (100%)"
-                                        Command="{Binding ResetZoomAndPanCommand}"
-                                        Padding="8,4" />
-                            </WrapPanel>
-                        </Border>
-
-                        <Border Grid.Row="1"
-                                BorderBrush="#CBD5E1"
-                                BorderThickness="1"
-                                CornerRadius="6"
-                                ClipToBounds="True"
-                                AllowDrop="True"
-                                PreviewDragOver="OnImageDropZoneDragOver"
-                                Drop="OnTestImageDrop">
-                            <controls:DefectOverlayCanvas ImageDataUri="{Binding ActiveImageDataUri}"
-                                                          Detections="{Binding Detections}"
-                                                          ShowBoundingBoxes="{Binding ShowBoundingBoxes}"
-                                                          ZoomFactor="{Binding ZoomFactor}"
-                                                          PanX="{Binding PanX}"
-                                                          PanY="{Binding PanY}" />
-                        </Border>
-                    </Grid>
-
-                    <!-- Right Column: Verdict Badge, Line Halted Banner, Latency & Per-Defect IPC Decisions -->
-                    <Border Grid.Column="2"
-                            Background="#F8FAFC"
-                            BorderBrush="#E2E8F0"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="16">
-                        <Grid>
+                        <Grid Grid.Column="0" Margin="0,0,24,0">
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
-
-                            <!-- Deterministic Verdict Badge (never recomputed by client) -->
-                            <Border Grid.Row="0"
-                                    Background="{Binding VerdictText, Converter={StaticResource VerdictToBrushConverter}}"
-                                    CornerRadius="8"
-                                    Padding="16,12"
-                                    Margin="0,0,0,10">
-                                <StackPanel HorizontalAlignment="Center">
-                                    <TextBlock Text="SERVER BOARD DISPOSITION"
-                                               FontSize="11"
-                                               FontWeight="Bold"
-                                               Foreground="#F8FAFC"
-                                               HorizontalAlignment="Center"
-                                               Opacity="0.9" />
-                                    <TextBlock Text="{Binding VerdictText, Converter={StaticResource VerdictToDisplayLabelConverter}}"
-                                               FontSize="24"
-                                               FontWeight="ExtraBold"
-                                               Foreground="White"
-                                               HorizontalAlignment="Center"
-                                               Margin="0,2,0,0" />
-                                </StackPanel>
-                            </Border>
-
-                            <!-- LINE HALTED Warning Banner -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <Button Content="Test"
+                                        Command="{Binding SelectLayerCommand}"
+                                        CommandParameter="Test"
+                                        Style="{StaticResource QuietButton}" />
+                                <Button Content="Template"
+                                        Command="{Binding SelectLayerCommand}"
+                                        CommandParameter="Template"
+                                        Style="{StaticResource QuietButton}" />
+                                <Button Content="Diff"
+                                        Command="{Binding SelectLayerCommand}"
+                                        CommandParameter="Diff"
+                                        Style="{StaticResource QuietButton}" />
+                                <CheckBox Content="Boxes"
+                                          IsChecked="{Binding ShowBoundingBoxes}"
+                                          VerticalAlignment="Center"
+                                          Margin="12,0,0,0"
+                                          Foreground="{StaticResource Brush.Muted}" />
+                                <Button Content="100%"
+                                        Command="{Binding ResetZoomAndPanCommand}"
+                                        Style="{StaticResource QuietButton}" />
+                            </StackPanel>
                             <Border Grid.Row="1"
-                                    Background="#FEF2F2"
-                                    BorderBrush="#EF4444"
-                                    BorderThickness="2"
-                                    CornerRadius="6"
-                                    Padding="10,8"
-                                    Margin="0,0,0,10"
-                                    Visibility="{Binding IsLineHalted, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <TextBlock Text="🚨 LINE HALTED — Systemic Batch Failure Threshold Exceeded"
-                                           Foreground="#B91C1C"
-                                           FontWeight="Bold"
-                                           TextWrapping="Wrap"
-                                           HorizontalAlignment="Center" />
+                                    Background="{StaticResource Brush.Canvas}"
+                                    CornerRadius="8"
+                                    AllowDrop="True"
+                                    DragOver="OnImageDropZoneDragOver"
+                                    Drop="OnTestImageDrop">
+                                <controls:DefectOverlayCanvas ImageDataUri="{Binding ActiveImageDataUri}"
+                                                              Detections="{Binding Detections}"
+                                                              ShowBoundingBoxes="{Binding ShowBoundingBoxes}"
+                                                              ZoomFactor="{Binding ZoomFactor}"
+                                                              PanX="{Binding PanX}"
+                                                              PanY="{Binding PanY}"
+                                                              SelectDefectCommand="{Binding SelectDefectCommand}" />
                             </Border>
+                        </Grid>
 
-                            <!-- Stage-1 Latency & Client Round-Trip Telemetry -->
-                            <Border Grid.Row="2"
-                                    Background="White"
-                                    BorderBrush="#E2E8F0"
-                                    BorderThickness="1"
-                                    CornerRadius="6"
-                                    Padding="10,8"
-                                    Margin="0,0,0,10">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0">
-                                        <TextBlock Text="Stage-1 CV Latency" FontSize="11" Foreground="#64748B" />
-                                        <TextBlock Text="{Binding Stage1LatencyMs, StringFormat={}{0:F1} ms}"
-                                                   FontSize="14"
-                                                   FontWeight="Bold"
-                                                   Foreground="#0F172A" />
+                        <DockPanel Grid.Column="1">
+                            <Button DockPanel.Dock="Bottom"
+                                    Content="{Binding PrimaryActionLabel}"
+                                    Click="OnPrimaryClick"
+                                    Style="{StaticResource PrimaryButton}"
+                                    Margin="0,16,0,0" />
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel>
+                                    <ProgressBar Height="2"
+                                                 IsIndeterminate="True"
+                                                 BorderThickness="0"
+                                                 Foreground="{StaticResource Brush.Ink}"
+                                                 Background="{StaticResource Brush.Line}"
+                                                 Margin="0,0,0,12"
+                                                 Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    <TextBlock Text="{Binding VerdictText}"
+                                               FontSize="48"
+                                               FontWeight="SemiBold"
+                                               Margin="0,0,0,12">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{StaticResource Brush.Scrap}" />
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding HasResult}" Value="True" />
+                                                            <Condition Binding="{Binding HasError}" Value="False" />
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </MultiDataTrigger>
+                                                    <DataTrigger Binding="{Binding VerdictText}" Value="PASS">
+                                                        <Setter Property="Foreground" Value="{StaticResource Brush.Pass}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding VerdictText}" Value="REWORK">
+                                                        <Setter Property="Foreground" Value="{StaticResource Brush.Rework}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <StackPanel Orientation="Horizontal"
+                                                Margin="0,0,0,12"
+                                                Visibility="{Binding ShowFileNames, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock Text="{Binding TemplateFileName}"
+                                                   FontSize="12"
+                                                   Foreground="{StaticResource Brush.Muted}" />
+                                        <TextBlock Text=" · "
+                                                   FontSize="12"
+                                                   Foreground="{StaticResource Brush.Muted}" />
+                                        <TextBlock Text="{Binding TestFileName}"
+                                                   FontSize="12"
+                                                   Foreground="{StaticResource Brush.Muted}" />
                                     </StackPanel>
-                                    <StackPanel Grid.Column="1">
-                                        <TextBlock Text="Client Round-Trip" FontSize="11" Foreground="#64748B" />
-                                        <TextBlock Text="{Binding RoundTripMs, StringFormat={}{0:F1} ms}"
-                                                   FontSize="14"
-                                                   FontWeight="Bold"
-                                                   Foreground="#0F172A" />
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-
-                            <!-- Per-Defect IPC Decisions List -->
-                            <Grid Grid.Row="3">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="*" />
-                                </Grid.RowDefinitions>
-
-                                <TextBlock Grid.Row="0"
-                                           Text="IPC-A-600 Defect Decisions"
-                                           FontSize="14"
-                                           FontWeight="Bold"
-                                           Foreground="#0F172A"
-                                           Margin="0,0,0,8" />
-
-                                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                                    <ItemsControl ItemsSource="{Binding AlignedDefects}">
+                                    <ItemsControl ItemsSource="{Binding AlignedDefects}"
+                                                  Visibility="{Binding HasResult, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Border Background="White"
-                                                        BorderBrush="#CBD5E1"
-                                                        BorderThickness="1"
-                                                        CornerRadius="6"
-                                                        Padding="10"
-                                                        Margin="0,0,0,8">
-                                                    <StackPanel>
-                                                        <DockPanel Margin="0,0,0,4">
-                                                            <Border DockPanel.Dock="Right"
-                                                                    Background="{Binding Decision.Disposition, Converter={StaticResource VerdictToBrushConverter}}"
-                                                                    CornerRadius="4"
-                                                                    Padding="6,2">
-                                                                <TextBlock Text="{Binding Decision.Disposition}"
-                                                                           Foreground="White"
-                                                                           FontWeight="Bold"
-                                                                           FontSize="11" />
-                                                            </Border>
-                                                            <TextBlock FontWeight="Bold" FontSize="13" Foreground="#0F172A">
-                                                                <Run Text="#" /><Run Text="{Binding Index, Mode=OneWay}" />
-                                                                <Run Text=" " />
-                                                                <Run Text="{Binding Detection.DefectClass, Mode=OneWay}" />
-                                                                <Run Text=" (" /><Run Text="{Binding Detection.Confidence, StringFormat={}{0:P0}, Mode=OneWay}" /><Run Text=")" />
-                                                            </TextBlock>
-                                                        </DockPanel>
-
-                                                        <TextBlock FontSize="12" Foreground="#334155" Margin="0,2,0,2">
-                                                            <Run Text="Severity: " FontWeight="SemiBold" />
-                                                            <Run Text="{Binding Decision.Severity, Mode=OneWay}" />
-                                                            <Run Text=" · BBox: [" />
-                                                            <Run Text="{Binding Detection.X1, Mode=OneWay}" /><Run Text="," />
-                                                            <Run Text="{Binding Detection.Y1, Mode=OneWay}" /><Run Text="]–[" />
-                                                            <Run Text="{Binding Detection.X2, Mode=OneWay}" /><Run Text="," />
-                                                            <Run Text="{Binding Detection.Y2, Mode=OneWay}" /><Run Text="]" />
-                                                        </TextBlock>
-
-                                                        <TextBlock Text="{Binding Decision.IpcStandardClause}"
-                                                                   FontSize="11.5"
+                                                <Button Style="{StaticResource RowButton}"
+                                                        Command="{Binding DataContext.SelectDefectCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding Index}">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="88" />
+                                                            <ColumnDefinition Width="44" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{Binding Detection.DefectClass}"
+                                                                   FontSize="14"
                                                                    FontWeight="SemiBold"
-                                                                   Foreground="#1E40AF"
-                                                                   TextWrapping="Wrap"
-                                                                   Margin="0,2,0,4" />
-
-                                                        <TextBlock FontSize="11.5" Foreground="#334155" TextWrapping="Wrap" Margin="0,0,0,2">
-                                                            <Run Text="Electrical Risk: " FontWeight="SemiBold" />
-                                                            <Run Text="{Binding Decision.ElectricalFailureRisk, Mode=OneWay}" />
-                                                        </TextBlock>
-
-                                                        <TextBlock FontSize="11.5" Foreground="#334155" TextWrapping="Wrap" Margin="0,0,0,2">
-                                                            <Run Text="Root Cause: " FontWeight="SemiBold" />
-                                                            <Run Text="{Binding Decision.RootCauseHypothesis, Mode=OneWay}" />
-                                                        </TextBlock>
-
-                                                        <TextBlock FontSize="11.5" Foreground="#334155" TextWrapping="Wrap" Margin="0,0,0,2">
-                                                            <Run Text="Action: " FontWeight="SemiBold" />
-                                                            <Run Text="{Binding Decision.RecommendedCorrectiveAction, Mode=OneWay}" />
-                                                        </TextBlock>
-
-                                                        <Border Background="#FEF3C7"
-                                                                BorderBrush="#F59E0B"
-                                                                BorderThickness="1"
-                                                                CornerRadius="4"
-                                                                Padding="6,4"
-                                                                Margin="0,4,0,0"
-                                                                Visibility="{Binding Decision.GuardrailOverridden, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                                            <TextBlock FontSize="11" Foreground="#92400E" TextWrapping="Wrap">
-                                                                <Run Text="🛡 Guardrail Override: " FontWeight="Bold" />
-                                                                <Run Text="{Binding Decision.OverrideReason, Mode=OneWay}" />
-                                                            </TextBlock>
-                                                        </Border>
-                                                    </StackPanel>
-                                                </Border>
+                                                                   Foreground="{StaticResource Brush.Ink}"
+                                                                   VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Column="1"
+                                                                   Text="{Binding Detection.Confidence, StringFormat={}{0:0.00}}"
+                                                                   FontSize="14"
+                                                                   Foreground="{StaticResource Brush.Muted}"
+                                                                   VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Column="2"
+                                                                   Text="{Binding Decision.IpcStandardClause, Converter={StaticResource IpcClauseShortConverter}}"
+                                                                   FontSize="12"
+                                                                   Foreground="{StaticResource Brush.Muted}"
+                                                                   HorizontalAlignment="Right"
+                                                                   VerticalAlignment="Center" />
+                                                    </Grid>
+                                                </Button>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
-                                </ScrollViewer>
-                            </Grid>
-                        </Grid>
-                    </Border>
+                                    <TextBlock Text="{Binding SelectedDefectText}"
+                                               FontSize="12"
+                                               Foreground="{StaticResource Brush.Ink}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,12,0,0"
+                                               Visibility="{Binding ShowDefectDetail, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                </StackPanel>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Grid>
+
+                    <Button Content="{Binding PrimaryActionLabel}"
+                            Click="OnPrimaryClick"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowWorkspace}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                 </Grid>
             </TabItem>
 
@@ -1013,6 +805,16 @@
                                    FontSize="20"
                                    FontWeight="Bold"
                                    Foreground="#0F172A"
+                                   Margin="0,0,0,8" />
+
+                        <TextBlock Text="{Binding DataContext.DatabasePathText, RelativeSource={RelativeSource AncestorType=Window}}"
+                                   FontSize="12"
+                                   Foreground="#64748B"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,4" />
+                        <TextBlock Text="{Binding DataContext.LlmProviderStatusText, RelativeSource={RelativeSource AncestorType=Window}}"
+                                   FontSize="12"
+                                   Foreground="#64748B"
                                    Margin="0,0,0,16" />
 
                         <!-- API Settings -->
@@ -1057,7 +859,14 @@
 
                         <CheckBox Content="Render industrial green solder-mask &amp; copper trace visuals (colorize_pcb)"
                                   IsChecked="{Binding ColorizePcb}"
-                                  Margin="0,4,0,16" />
+                                  Margin="0,4,0,8" />
+
+                        <CheckBox Content="Clean-Board Mode"
+                                  IsChecked="{Binding DataContext.Inspect.CleanBoardMode, RelativeSource={RelativeSource AncestorType=Window}}"
+                                  Margin="0,4,0,4" />
+                        <CheckBox Content="Simulate Rogue VLM"
+                                  IsChecked="{Binding DataContext.Inspect.SimulateRogueVlm, RelativeSource={RelativeSource AncestorType=Window}}"
+                                  Margin="0,0,0,16" />
 
                         <!-- LLM Configuration -->
                         <TextBlock Text="LLM Explanation &amp; Query Settings (Verdicts Remain Rule-Based)"
@@ -1111,47 +920,8 @@
             </TabItem>
         </TabControl>
 
-        <!-- Bottom Status Bar (§7.5) -->
-        <StatusBar Grid.Row="1"
-                   Background="#0F172A"
-                   Foreground="#F8FAFC"
-                   Padding="12,6">
-            <StatusBarItem>
-                <Border Background="{Binding IsBackendOnline, Converter={StaticResource OnlineToStatusBrushConverter}}"
-                        CornerRadius="10"
-                        Padding="10,2"
-                        ToolTip="{Binding BackendStatusTooltip}">
-                    <TextBlock Text="{Binding BackendStatusText}"
-                               Foreground="White"
-                               FontWeight="SemiBold"
-                               FontSize="12" />
-                </Border>
-            </StatusBarItem>
-
-            <Separator Background="#334155" Margin="8,0" />
-
-            <StatusBarItem>
-                <TextBlock Text="{Binding DetectorAndVersionText}"
-                           Foreground="#E2E8F0"
-                           FontSize="12" />
-            </StatusBarItem>
-
-            <Separator Background="#334155" Margin="8,0" />
-
-            <StatusBarItem>
-                <TextBlock Text="{Binding DatabasePathText}"
-                           Foreground="#94A3B8"
-                           FontSize="12"
-                           ToolTip="Local SQLite inspection history path" />
-            </StatusBarItem>
-
-            <Separator Background="#334155" Margin="8,0" />
-
-            <StatusBarItem>
-                <TextBlock Text="{Binding LlmProviderStatusText}"
-                           Foreground="#E2E8F0"
-                           FontSize="12" />
-            </StatusBarItem>
-        </StatusBar>
+        <Border Grid.Row="2" BorderBrush="{StaticResource Brush.Line}" BorderThickness="0,1,0,0" Padding="16,6" Background="{StaticResource Brush.Paper}">
+            <TextBlock Text="{Binding FooterText}" FontSize="12" Foreground="{StaticResource Brush.Muted}" />
+        </Border>
     </Grid>
 </Window>
