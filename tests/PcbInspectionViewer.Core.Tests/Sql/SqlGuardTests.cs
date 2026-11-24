@@ -92,6 +92,13 @@ public sealed class SqlGuardTests : IDisposable
     [InlineData("SELECT * FROM QueryLogs")]
     [InlineData("SELECT * FROM sqlite_master")]
     [InlineData("SELECT * FROM v_inspections i JOIN Inspections raw ON i.Id = raw.Id")]
+    // Comma-join, schema-qualified, and quoted identifier bypasses
+    [InlineData("SELECT * FROM v_inspections, sqlite_master")]
+    [InlineData("SELECT * FROM v_inspections i, Inspections raw")]
+    [InlineData("SELECT * FROM v_inspections, main.Inspections")]
+    [InlineData("SELECT * FROM \"Inspections\"")]
+    [InlineData("SELECT * FROM [sqlite_master]")]
+    [InlineData("SELECT * FROM v_inspections JOIN \"Inspections\" ON 1=1")]
     // Empty & Whitespace
     [InlineData("")]
     [InlineData("   ")]

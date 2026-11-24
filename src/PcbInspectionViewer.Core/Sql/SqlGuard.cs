@@ -19,9 +19,9 @@ public sealed class SqlGuard : ISqlGuard
         "v_batches"
     };
 
-    // Disallowed keywords & functions
+    // Disallowed keywords, extensions, and SQLite system catalog tables
     private static readonly Regex DisallowedKeywordsRegex = new(
-        @"\b(attach|detach|pragma|insert|update|delete|drop|alter|create|replace|load_extension|reindex|vacuum|transaction|commit|rollback|savepoint|release)\b",
+        @"\b(attach|detach|pragma|insert|update|delete|drop|alter|create|replace|load_extension|reindex|vacuum|transaction|commit|rollback|savepoint|release|sqlite_master|sqlite_schema|sqlite_temp_master|sqlite_temp_schema)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // Comment indicators -- or /* */
@@ -29,10 +29,13 @@ public sealed class SqlGuard : ISqlGuard
         @"(--|/\*|\*/)",
         RegexOptions.Compiled);
 
-    // Matches FROM or JOIN followed by an identifier
-    private static readonly Regex TableOrViewReferenceRegex = new(
-        @"\b(?:from|join)\s+([a-zA-Z0-9_]+)",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly HashSet<string> ClauseBoundaryKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "WHERE", "GROUP", "HAVING", "WINDOW", "ORDER", "LIMIT", "OFFSET",
+        "UNION", "INTERSECT", "EXCEPT", "JOIN", "INNER", "LEFT", "RIGHT",
+        "FULL", "CROSS", "NATURAL", "OUTER", "ON", "USING", "FOR", "SET",
+        "VALUES", "INTO", "RETURNING"
+    };
 
     public SqlGuard(string dbPath, Func<InspectionDbContext> auditDbContextFactory)
     {
@@ -106,17 +109,9 @@ public sealed class SqlGuard : ISqlGuard
             }
         }
 
-        MatchCollection viewMatches = TableOrViewReferenceRegex.Matches(trimmed);
-        if (viewMatches.Count > 0)
+        if (!ValidateTableReferences(trimmed, allowedInQuery, out string? tableRejectionReason))
         {
-            foreach (Match match in viewMatches)
-            {
-                string target = match.Groups[1].Value;
-                if (!allowedInQuery.Contains(target))
-                {
-                    return new SqlValidationResult(false, null, $"Access to table or view '{target}' is not allowed. Only allowlisted views ({string.Join(", ", AllowedViews)}) may be queried.");
-                }
-            }
+            return new SqlValidationResult(false, null, tableRejectionReason);
         }
 
         // 6. Parameter limits: max 10, string length <= 100
@@ -261,5 +256,311 @@ public sealed class SqlGuard : ISqlGuard
         {
             // Logging failure should never take down query pipeline
         }
+    }
+
+    private enum SqlTokenKind
+    {
+        Word,
+        QuotedIdentifier,
+        StringLiteral,
+        Symbol
+    }
+
+    private readonly record struct SqlToken(SqlTokenKind Kind, string Value)
+    {
+        public bool IsKeyword(string keyword) =>
+            Kind == SqlTokenKind.Word && Value.Equals(keyword, StringComparison.OrdinalIgnoreCase);
+
+        public bool IsSymbol(string sym) =>
+            Kind == SqlTokenKind.Symbol && Value == sym;
+    }
+
+    private static bool ValidateTableReferences(string sql, ISet<string> allowedInQuery, out string? rejectionReason)
+    {
+        List<SqlToken> tokens = TokenizeSql(sql);
+        return ValidateTokenRange(tokens, 0, tokens.Count, allowedInQuery, out rejectionReason);
+    }
+
+    private static bool ValidateTokenRange(
+        IReadOnlyList<SqlToken> tokens,
+        int start,
+        int end,
+        ISet<string> allowedInQuery,
+        out string? rejectionReason)
+    {
+        int i = start;
+        while (i < end)
+        {
+            SqlToken token = tokens[i];
+            if (token.IsKeyword("FROM"))
+            {
+                // Ignore SQLite `IS [NOT] DISTINCT FROM <expr>`
+                bool isDistinctFrom = i > start && tokens[i - 1].IsKeyword("DISTINCT");
+                if (isDistinctFrom)
+                {
+                    i++;
+                    continue;
+                }
+
+                i++;
+                if (!ValidateFromList(tokens, ref i, end, allowedInQuery, out rejectionReason))
+                {
+                    return false;
+                }
+                continue;
+            }
+
+            if (token.IsKeyword("JOIN"))
+            {
+                i++;
+                if (!ValidateTableFactor(tokens, ref i, end, allowedInQuery, out rejectionReason))
+                {
+                    return false;
+                }
+                continue;
+            }
+
+            i++;
+        }
+
+        rejectionReason = null;
+        return true;
+    }
+
+    private static bool ValidateFromList(
+        IReadOnlyList<SqlToken> tokens,
+        ref int index,
+        int end,
+        ISet<string> allowedInQuery,
+        out string? rejectionReason)
+    {
+        while (index < end)
+        {
+            if (!ValidateTableFactor(tokens, ref index, end, allowedInQuery, out rejectionReason))
+            {
+                return false;
+            }
+
+            if (index < end && tokens[index].IsSymbol(","))
+            {
+                index++;
+                continue;
+            }
+
+            break;
+        }
+
+        rejectionReason = null;
+        return true;
+    }
+
+    private static bool ValidateTableFactor(
+        IReadOnlyList<SqlToken> tokens,
+        ref int index,
+        int end,
+        ISet<string> allowedInQuery,
+        out string? rejectionReason)
+    {
+        if (index >= end)
+        {
+            rejectionReason = "Malformed FROM/JOIN clause.";
+            return false;
+        }
+
+        if (tokens[index].IsSymbol("("))
+        {
+            int closeIndex = FindMatchingParen(tokens, index, end);
+            if (closeIndex < 0)
+            {
+                rejectionReason = "Unmatched parenthesis in FROM/JOIN clause.";
+                return false;
+            }
+
+            int innerStart = index + 1;
+            if (innerStart < closeIndex && (tokens[innerStart].IsKeyword("SELECT") || tokens[innerStart].IsKeyword("WITH")))
+            {
+                if (!ValidateTokenRange(tokens, innerStart, closeIndex, allowedInQuery, out rejectionReason))
+                {
+                    return false;
+                }
+            }
+            else if (innerStart < closeIndex)
+            {
+                int innerIdx = innerStart;
+                if (!ValidateFromList(tokens, ref innerIdx, closeIndex, allowedInQuery, out rejectionReason))
+                {
+                    return false;
+                }
+                if (innerIdx < closeIndex && !ValidateTokenRange(tokens, innerIdx, closeIndex, allowedInQuery, out rejectionReason))
+                {
+                    return false;
+                }
+            }
+
+            index = closeIndex + 1;
+            SkipOptionalAlias(tokens, ref index, end);
+            rejectionReason = null;
+            return true;
+        }
+
+        SqlToken targetToken = tokens[index];
+        if (targetToken.Kind != SqlTokenKind.Word && targetToken.Kind != SqlTokenKind.QuotedIdentifier)
+        {
+            rejectionReason = $"Unexpected token '{targetToken.Value}' in FROM/JOIN clause.";
+            return false;
+        }
+
+        if (index + 1 < end && tokens[index + 1].IsSymbol("."))
+        {
+            string qualifiedTarget = index + 2 < end ? $"{targetToken.Value}.{tokens[index + 2].Value}" : targetToken.Value;
+            rejectionReason = $"Schema-qualified access to '{qualifiedTarget}' is not allowed. Only allowlisted views ({string.Join(", ", AllowedViews)}) may be queried.";
+            return false;
+        }
+
+        string tableName = targetToken.Value;
+        if (!allowedInQuery.Contains(tableName))
+        {
+            rejectionReason = $"Access to table or view '{tableName}' is not allowed. Only allowlisted views ({string.Join(", ", AllowedViews)}) may be queried.";
+            return false;
+        }
+
+        index++;
+        SkipOptionalAlias(tokens, ref index, end);
+        rejectionReason = null;
+        return true;
+    }
+
+    private static void SkipOptionalAlias(IReadOnlyList<SqlToken> tokens, ref int index, int end)
+    {
+        if (index >= end)
+        {
+            return;
+        }
+
+        if (tokens[index].IsKeyword("AS"))
+        {
+            index++;
+            if (index < end && (tokens[index].Kind == SqlTokenKind.Word || tokens[index].Kind == SqlTokenKind.QuotedIdentifier))
+            {
+                index++;
+            }
+            return;
+        }
+
+        SqlToken next = tokens[index];
+        if (next.Kind == SqlTokenKind.QuotedIdentifier ||
+            (next.Kind == SqlTokenKind.Word && !ClauseBoundaryKeywords.Contains(next.Value)))
+        {
+            index++;
+        }
+    }
+
+    private static int FindMatchingParen(IReadOnlyList<SqlToken> tokens, int openIndex, int end)
+    {
+        int depth = 0;
+        for (int i = openIndex; i < end; i++)
+        {
+            if (tokens[i].IsSymbol("("))
+            {
+                depth++;
+            }
+            else if (tokens[i].IsSymbol(")"))
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private static List<SqlToken> TokenizeSql(string sql)
+    {
+        var tokens = new List<SqlToken>();
+        int i = 0;
+        while (i < sql.Length)
+        {
+            char c = sql[i];
+            if (char.IsWhiteSpace(c))
+            {
+                i++;
+                continue;
+            }
+
+            // Single-quoted string literal
+            if (c == '\'')
+            {
+                int start = ++i;
+                while (i < sql.Length)
+                {
+                    if (sql[i] == '\'' && i + 1 < sql.Length && sql[i + 1] == '\'')
+                    {
+                        i += 2;
+                        continue;
+                    }
+                    if (sql[i] == '\'')
+                    {
+                        break;
+                    }
+                    i++;
+                }
+                tokens.Add(new SqlToken(SqlTokenKind.StringLiteral, sql[start..Math.Min(i, sql.Length)]));
+                if (i < sql.Length && sql[i] == '\'')
+                {
+                    i++;
+                }
+                continue;
+            }
+
+            // Quoted identifier ("...", `...`, or [...])
+            if (c == '"' || c == '`' || c == '[')
+            {
+                char closeChar = c == '[' ? ']' : c;
+                int start = ++i;
+                while (i < sql.Length)
+                {
+                    if (c != '[' && sql[i] == closeChar && i + 1 < sql.Length && sql[i + 1] == closeChar)
+                    {
+                        i += 2;
+                        continue;
+                    }
+                    if (sql[i] == closeChar)
+                    {
+                        break;
+                    }
+                    i++;
+                }
+                string rawIdent = sql[start..Math.Min(i, sql.Length)];
+                if (c != '[')
+                {
+                    rawIdent = rawIdent.Replace($"{closeChar}{closeChar}", $"{closeChar}");
+                }
+                tokens.Add(new SqlToken(SqlTokenKind.QuotedIdentifier, rawIdent));
+                if (i < sql.Length && sql[i] == closeChar)
+                {
+                    i++;
+                }
+                continue;
+            }
+
+            // Unquoted word / identifier
+            if (char.IsLetter(c) || c == '_')
+            {
+                int start = i;
+                while (i < sql.Length && (char.IsLetterOrDigit(sql[i]) || sql[i] == '_'))
+                {
+                    i++;
+                }
+                tokens.Add(new SqlToken(SqlTokenKind.Word, sql[start..i]));
+                continue;
+            }
+
+            tokens.Add(new SqlToken(SqlTokenKind.Symbol, c.ToString()));
+            i++;
+        }
+
+        return tokens;
     }
 }
